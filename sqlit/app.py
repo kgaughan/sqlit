@@ -123,6 +123,7 @@ class SSMSTUI(App):
         Binding("r", "focus_results", "Results", show=False),
         Binding("i", "enter_insert_mode", "Insert", show=False),
         Binding("escape", "exit_insert_mode", "Normal", show=False),
+        Binding("enter", "execute_query", "Execute", show=False),
     ]
 
     def __init__(self):
@@ -229,7 +230,7 @@ class SSMSTUI(App):
                             r"\[Q] Query", classes="section-label", id="label-query"
                         )
                         yield TextArea(
-                            "SELECT @@VERSION",
+                            "",
                             language="sql",
                             id="query-input",
                             read_only=True,

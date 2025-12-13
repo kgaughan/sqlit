@@ -5,7 +5,7 @@ A simple terminal UI for SQL Server, for those who just want to run some queries
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-<!-- ![Demo](demo.gif) -->
+![Demo](demo-query.gif)
 
 You know that mass of software that is SSMS? You open it up and wait... and wait... just to run a simple SELECT query. Meanwhile it's eating up your RAM like there's no tomorrow.
 

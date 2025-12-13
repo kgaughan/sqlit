@@ -21,3 +21,8 @@ venv/
 
 # OS
 .DS_Store
+
+# Demo files
+docker-compose.yml
+init.sql
+*.tape

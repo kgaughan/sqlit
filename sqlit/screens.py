@@ -208,7 +208,7 @@ class ConnectionScreen(ModalScreen):
         """Get the initial auth type from config."""
         if self.config:
             return self.config.get_auth_type()
-        return AuthType.WINDOWS
+        return AuthType.SQL_SERVER
 
     def compose(self) -> ComposeResult:
         title = "Edit Connection" if self.editing else "New Connection"
@@ -265,8 +265,8 @@ class ConnectionScreen(ModalScreen):
 
             yield Static("Authentication", classes="field-label")
             auth_list = OptionList(
-                Option(AUTH_TYPE_LABELS[AuthType.WINDOWS], id=AuthType.WINDOWS.value),
                 Option(AUTH_TYPE_LABELS[AuthType.SQL_SERVER], id=AuthType.SQL_SERVER.value),
+                Option(AUTH_TYPE_LABELS[AuthType.WINDOWS], id=AuthType.WINDOWS.value),
                 Option(AUTH_TYPE_LABELS[AuthType.AD_PASSWORD], id=AuthType.AD_PASSWORD.value),
                 Option(
                     AUTH_TYPE_LABELS[AuthType.AD_INTERACTIVE], id=AuthType.AD_INTERACTIVE.value
@@ -313,8 +313,8 @@ class ConnectionScreen(ModalScreen):
         auth_list = self.query_one("#auth-list", OptionList)
         auth_type = self._get_initial_auth_type()
         auth_options = [
-            AuthType.WINDOWS,
             AuthType.SQL_SERVER,
+            AuthType.WINDOWS,
             AuthType.AD_PASSWORD,
             AuthType.AD_INTERACTIVE,
             AuthType.AD_INTEGRATED,
@@ -394,14 +394,14 @@ class ConnectionScreen(ModalScreen):
         """Get the currently selected auth type."""
         auth_list = self.query_one("#auth-list", OptionList)
         auth_options = [
-            AuthType.WINDOWS,
             AuthType.SQL_SERVER,
+            AuthType.WINDOWS,
             AuthType.AD_PASSWORD,
             AuthType.AD_INTERACTIVE,
             AuthType.AD_INTEGRATED,
         ]
         idx = auth_list.highlighted or 0
-        return auth_options[idx] if idx < len(auth_options) else AuthType.WINDOWS
+        return auth_options[idx] if idx < len(auth_options) else AuthType.SQL_SERVER
 
     def _get_config(self) -> ConnectionConfig | None:
         name = self.query_one("#conn-name", Input).value
