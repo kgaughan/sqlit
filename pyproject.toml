@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sqlit-tui"
-version = "0.2.0"
+version = "0.2.1"
 description = "A terminal UI for SQL Server, PostgreSQL, MySQL, and SQLite"
 readme = "README.md"
 license = "MIT"
