@@ -35,9 +35,8 @@ I tried to use some existing TUI's for SQL, but they were not intuitive for me a
 
 sqlit is a lightweight SQL Server TUI that is easy to use and beautiful to look at, just connect and query. It's for you that just wants to run queries toward your database without launching applications that eats your ram and takes time to load up. Sqlit is designed to make it easy and enjoyable to access your data, not painful.
 
-It also comes with a CLI, so you can access your data without any interface at all. This comes in especially handy if you want to use AI to write queries for you.
+It also comes with a CLI, so you can manage your connections and access your data programmatically.
 
-Example prompt: "Use the sqlit cli to show me the users with the most orders."
 
 
 
