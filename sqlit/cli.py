@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""sqlit - A terminal UI for SQL Server."""
+"""sqlit - A terminal UI for SQL databases."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 
-from .config import AuthType
+from .config import AuthType, DatabaseType
 
 
 def main() -> int:
     """Entry point for the CLI."""
     parser = argparse.ArgumentParser(
         prog="sqlit",
-        description="A terminal UI for SQL Server",
+        description="A terminal UI for SQL Server, PostgreSQL, MySQL, and SQLite databases",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -29,36 +29,51 @@ def main() -> int:
     # connection create
     create_parser = conn_subparsers.add_parser("create", help="Create a new connection")
     create_parser.add_argument("--name", "-n", required=True, help="Connection name")
-    create_parser.add_argument("--server", "-s", required=True, help="Server address")
-    create_parser.add_argument("--port", "-P", default="1433", help="Port (default: 1433)")
     create_parser.add_argument(
-        "--database", "-d", default="", help="Database (empty = browse all databases)"
+        "--db-type",
+        "-t",
+        default="mssql",
+        choices=[t.value for t in DatabaseType],
+        help="Database type (default: mssql)",
     )
+    # Server-based database options (SQL Server, PostgreSQL, MySQL)
+    create_parser.add_argument("--server", "-s", help="Server address")
+    create_parser.add_argument("--port", "-P", help="Port (default: 1433/5432/3306)")
     create_parser.add_argument(
-        "--auth-type",
-        "-a",
-        default="windows",
-        choices=[t.value for t in AuthType],
-        help="Authentication type (default: windows)",
+        "--database", "-d", default="", help="Database name (empty = browse all)"
     )
     create_parser.add_argument("--username", "-u", help="Username")
     create_parser.add_argument("--password", "-p", help="Password")
+    # SQL Server specific options
+    create_parser.add_argument(
+        "--auth-type",
+        "-a",
+        default="sql",
+        choices=[t.value for t in AuthType],
+        help="Authentication type (SQL Server only, default: sql)",
+    )
+    # SQLite options
+    create_parser.add_argument("--file-path", help="Database file path (SQLite only)")
 
     # connection edit
     edit_parser = conn_subparsers.add_parser("edit", help="Edit an existing connection")
     edit_parser.add_argument("connection_name", help="Name of connection to edit")
     edit_parser.add_argument("--name", "-n", help="New connection name")
+    # Server-based database options (SQL Server, PostgreSQL, MySQL)
     edit_parser.add_argument("--server", "-s", help="Server address")
     edit_parser.add_argument("--port", "-P", help="Port")
-    edit_parser.add_argument("--database", "-d", help="Database")
+    edit_parser.add_argument("--database", "-d", help="Database name")
+    edit_parser.add_argument("--username", "-u", help="Username")
+    edit_parser.add_argument("--password", "-p", help="Password")
+    # SQL Server specific options
     edit_parser.add_argument(
         "--auth-type",
         "-a",
         choices=[t.value for t in AuthType],
-        help="Authentication type",
+        help="Authentication type (SQL Server only)",
     )
-    edit_parser.add_argument("--username", "-u", help="Username")
-    edit_parser.add_argument("--password", "-p", help="Password")
+    # SQLite options
+    edit_parser.add_argument("--file-path", help="Database file path (SQLite only)")
 
     # connection delete
     delete_parser = conn_subparsers.add_parser("delete", help="Delete a connection")

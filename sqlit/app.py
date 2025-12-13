@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 try:
     import pyodbc
 
@@ -14,6 +16,7 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.widgets import DataTable, Static, TextArea, Tree
 
+from .adapters import DatabaseAdapter, get_adapter
 from .config import (
     ConnectionConfig,
     load_connections,
@@ -124,13 +127,17 @@ class SSMSTUI(App):
         Binding("i", "enter_insert_mode", "Insert", show=False),
         Binding("escape", "exit_insert_mode", "Normal", show=False),
         Binding("enter", "execute_query", "Execute", show=False),
+        Binding("d", "clear_query", "Clear", show=False),
+        Binding("n", "new_query", "New", show=False),
+        Binding("h", "show_history", "History", show=False),
     ]
 
     def __init__(self):
         super().__init__()
         self.connections: list[ConnectionConfig] = []
-        self.current_connection: pyodbc.Connection | None = None
+        self.current_connection: Any | None = None
         self.current_config: ConnectionConfig | None = None
+        self.current_adapter: DatabaseAdapter | None = None
         self.vim_mode: VimMode = VimMode.NORMAL
         self._expanded_paths: set[str] = set()
         self._schema_cache: dict = {
@@ -197,6 +204,10 @@ class SSMSTUI(App):
             return (
                 query_focused or results_focused
             ) and self.current_connection is not None
+        elif action in ("clear_query", "new_query"):
+            return query_focused and self.vim_mode == VimMode.NORMAL
+        elif action == "show_history":
+            return query_focused and self.vim_mode == VimMode.NORMAL and self.current_config is not None
         elif action == "focus_explorer":
             if tree_focused and node_type == "connection":
                 return False
@@ -281,6 +292,11 @@ class SSMSTUI(App):
 
     def _check_drivers(self) -> None:
         """Check if ODBC drivers are installed and show setup if needed."""
+        # Only check drivers if there are SQL Server connections configured
+        has_mssql = any(c.db_type == "mssql" for c in self.connections)
+        if not has_mssql:
+            return
+
         if not PYODBC_AVAILABLE:
             return
 
@@ -660,8 +676,9 @@ class SSMSTUI(App):
         tree.root.expand()
 
         for conn in self.connections:
-            db_part = f"@{conn.database}" if conn.database else ""
-            node = tree.root.add(f"[dim]{conn.name}[/dim] ({conn.server}{db_part})")
+            display_info = conn.get_display_info()
+            db_type_label = "SQL" if conn.db_type == "mssql" else "SQLite"
+            node = tree.root.add(f"[dim]{conn.name}[/dim] [{db_type_label}] ({display_info})")
             node.data = ("connection", conn)
             node.allow_expand = True
 
@@ -670,15 +687,17 @@ class SSMSTUI(App):
 
     def populate_connected_tree(self) -> None:
         """Populate tree with database objects when connected."""
-        if not self.current_connection or not self.current_config:
+        if not self.current_connection or not self.current_config or not self.current_adapter:
             return
 
         tree = self.query_one("#object-tree", Tree)
+        adapter = self.current_adapter
 
         def get_conn_label(config, connected=False):
-            db_part = f"@{config.database}" if config.database else ""
+            display_info = config.get_display_info()
+            db_type_label = "SQL" if config.db_type == "mssql" else "SQLite"
             name = f"[green]{config.name}[/green]" if connected else config.name
-            return f"{name} ({config.server}{db_part})"
+            return f"{name} [{db_type_label}] ({display_info})"
 
         active_node = None
         for child in tree.root.children:
@@ -697,52 +716,51 @@ class SSMSTUI(App):
         active_node.remove_children()
 
         try:
-            cursor = self.current_connection.cursor()
+            # Check if this database type supports multiple databases
+            if adapter.supports_multiple_databases:
+                specific_db = self.current_config.database
+                if specific_db and specific_db.lower() not in ("", "master"):
+                    # Show objects for a specific database
+                    self._add_database_object_nodes(active_node, specific_db)
+                    active_node.expand()
+                else:
+                    # Show all databases
+                    dbs_node = active_node.add("Databases")
+                    dbs_node.data = ("folder", "databases")
 
-            specific_db = self.current_config.database
-            if specific_db and specific_db.lower() not in ("", "master"):
-                tables_node = active_node.add("Tables")
-                tables_node.data = ("folder", "tables", specific_db)
-                tables_node.allow_expand = True
+                    databases = adapter.get_databases(self.current_connection)
+                    for db_name in databases:
+                        db_node = dbs_node.add(db_name)
+                        db_node.data = ("database", db_name)
+                        db_node.allow_expand = True
+                        self._add_database_object_nodes(db_node, db_name)
 
-                views_node = active_node.add("Views")
-                views_node.data = ("folder", "views", specific_db)
-                views_node.allow_expand = True
-
-                procs_node = active_node.add("Stored Procedures")
-                procs_node.data = ("folder", "procedures", specific_db)
-                procs_node.allow_expand = True
-
-                active_node.expand()
+                    active_node.expand()
+                    dbs_node.expand()
             else:
-                dbs_node = active_node.add("Databases")
-                dbs_node.data = ("folder", "databases")
-
-                cursor.execute("SELECT name FROM sys.databases ORDER BY name")
-                for row in cursor.fetchall():
-                    db_node = dbs_node.add(row[0])
-                    db_node.data = ("database", row[0])
-                    db_node.allow_expand = True
-
-                    tables_node = db_node.add("Tables")
-                    tables_node.data = ("folder", "tables", row[0])
-                    tables_node.allow_expand = True
-
-                    views_node = db_node.add("Views")
-                    views_node.data = ("folder", "views", row[0])
-                    views_node.allow_expand = True
-
-                    procs_node = db_node.add("Stored Procedures")
-                    procs_node.data = ("folder", "procedures", row[0])
-                    procs_node.allow_expand = True
-
+                # SQLite and other single-database systems
+                self._add_database_object_nodes(active_node, None)
                 active_node.expand()
-                dbs_node.expand()
 
             self.call_later(lambda: self._restore_subtree_expansion(active_node))
 
         except Exception as e:
             self.notify(f"Error loading objects: {e}", severity="error")
+
+    def _add_database_object_nodes(self, parent_node, database: str | None) -> None:
+        """Add Tables, Views, and optionally Stored Procedures nodes."""
+        tables_node = parent_node.add("Tables")
+        tables_node.data = ("folder", "tables", database)
+        tables_node.allow_expand = True
+
+        views_node = parent_node.add("Views")
+        views_node.data = ("folder", "views", database)
+        views_node.allow_expand = True
+
+        if self.current_adapter and self.current_adapter.supports_stored_procedures:
+            procs_node = parent_node.add("Stored Procedures")
+            procs_node.data = ("folder", "procedures", database)
+            procs_node.allow_expand = True
 
     def _get_node_path(self, node) -> str:
         """Get a unique path string for a tree node."""
@@ -805,43 +823,32 @@ class SSMSTUI(App):
 
         self.call_later(self._save_expanded_state)
 
-        if not node.data or not self.current_connection:
+        if not node.data or not self.current_connection or not self.current_adapter:
             return
 
         data = node.data
+        adapter = self.current_adapter
 
         if len(list(node.children)) > 0:
             return
 
         try:
-            cursor = self.current_connection.cursor()
-
             if data[0] == "table" and len(data) >= 3:
                 db_name = data[1]
                 table_name = data[2]
-                cursor.execute(
-                    f"SELECT COLUMN_NAME, DATA_TYPE FROM [{db_name}].INFORMATION_SCHEMA.COLUMNS "
-                    f"WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
-                    (table_name,),
-                )
-                for row in cursor.fetchall():
-                    col_name, col_type = row[0], row[1]
-                    child = node.add(f"[dim]{col_name}[/] [italic dim]{col_type}[/]")
-                    child.data = ("column", db_name, table_name, col_name)
+                columns = adapter.get_columns(self.current_connection, table_name, db_name)
+                for col in columns:
+                    child = node.add(f"[dim]{col.name}[/] [italic dim]{col.data_type}[/]")
+                    child.data = ("column", db_name, table_name, col.name)
                 return
 
             if data[0] == "view" and len(data) >= 3:
                 db_name = data[1]
                 view_name = data[2]
-                cursor.execute(
-                    f"SELECT COLUMN_NAME, DATA_TYPE FROM [{db_name}].INFORMATION_SCHEMA.COLUMNS "
-                    f"WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
-                    (view_name,),
-                )
-                for row in cursor.fetchall():
-                    col_name, col_type = row[0], row[1]
-                    child = node.add(f"[dim]{col_name}[/] [italic dim]{col_type}[/]")
-                    child.data = ("column", db_name, view_name, col_name)
+                columns = adapter.get_columns(self.current_connection, view_name, db_name)
+                for col in columns:
+                    child = node.add(f"[dim]{col.name}[/] [italic dim]{col.data_type}[/]")
+                    child.data = ("column", db_name, view_name, col.name)
                 return
 
             if data[0] != "folder" or len(data) < 3:
@@ -851,33 +858,25 @@ class SSMSTUI(App):
             db_name = data[2]
 
             if folder_type == "tables":
-                cursor.execute(
-                    f"SELECT TABLE_NAME FROM [{db_name}].INFORMATION_SCHEMA.TABLES "
-                    f"WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"
-                )
-                for row in cursor.fetchall():
-                    child = node.add(row[0])
-                    child.data = ("table", db_name, row[0])
+                tables = adapter.get_tables(self.current_connection, db_name)
+                for table_name in tables:
+                    child = node.add(table_name)
+                    child.data = ("table", db_name, table_name)
                     child.allow_expand = True
 
             elif folder_type == "views":
-                cursor.execute(
-                    f"SELECT TABLE_NAME FROM [{db_name}].INFORMATION_SCHEMA.VIEWS "
-                    f"ORDER BY TABLE_NAME"
-                )
-                for row in cursor.fetchall():
-                    child = node.add(row[0])
-                    child.data = ("view", db_name, row[0])
+                views = adapter.get_views(self.current_connection, db_name)
+                for view_name in views:
+                    child = node.add(view_name)
+                    child.data = ("view", db_name, view_name)
                     child.allow_expand = True
 
             elif folder_type == "procedures":
-                cursor.execute(
-                    f"SELECT ROUTINE_NAME FROM [{db_name}].INFORMATION_SCHEMA.ROUTINES "
-                    f"WHERE ROUTINE_TYPE = 'PROCEDURE' ORDER BY ROUTINE_NAME"
-                )
-                for row in cursor.fetchall():
-                    child = node.add(row[0])
-                    child.data = ("procedure", db_name, row[0])
+                if adapter.supports_stored_procedures:
+                    procedures = adapter.get_procedures(self.current_connection, db_name)
+                    for proc_name in procedures:
+                        child = node.add(proc_name)
+                        child.data = ("procedure", db_name, proc_name)
 
         except Exception as e:
             self.notify(f"Error loading: {e}", severity="error")
@@ -952,29 +951,32 @@ class SSMSTUI(App):
             self.notify(f"Connection '{config.name}' saved")
 
     def connect_to_server(self, config: ConnectionConfig) -> None:
-        """Connect to a SQL Server."""
-        if not PYODBC_AVAILABLE:
-            self.notify("pyodbc not installed", severity="error")
+        """Connect to a database."""
+        # Check for pyodbc only if it's a SQL Server connection
+        if config.db_type == "mssql" and not PYODBC_AVAILABLE:
+            self.notify("pyodbc not installed. Run: pip install pyodbc", severity="error")
             return
 
         try:
-            conn_str = config.get_connection_string()
-            self.current_connection = pyodbc.connect(conn_str, timeout=10)
+            adapter = get_adapter(config.db_type)
+            self.current_connection = adapter.connect(config)
             self.current_config = config
+            self.current_adapter = adapter
 
             status = self.query_one("#status-bar", Static)
-            status.update(f"Connected to {config.server} - {config.database}")
+            display_info = config.get_display_info()
+            status.update(f"Connected to {display_info}")
 
             self.refresh_tree()
             self._load_schema_cache()
-            self.notify(f"Connected to {config.server}")
+            self.notify(f"Connected to {config.name}")
 
         except Exception as e:
             self.notify(f"Connection failed: {e}", severity="error")
 
     def _load_schema_cache(self) -> None:
         """Load database schema for autocomplete."""
-        if not self.current_connection or not self.current_config:
+        if not self.current_connection or not self.current_config or not self.current_adapter:
             return
 
         self._schema_cache = {
@@ -984,78 +986,68 @@ class SSMSTUI(App):
             "procedures": [],
         }
 
-        try:
-            cursor = self.current_connection.cursor()
-            db = self.current_config.database
+        adapter = self.current_adapter
 
-            if db and db.lower() not in ("", "master"):
-                databases = [db]
+        try:
+            # Determine which databases to load
+            if adapter.supports_multiple_databases:
+                db = self.current_config.database
+                if db and db.lower() not in ("", "master"):
+                    databases = [db]
+                else:
+                    # Get user databases (skip system databases for SQL Server)
+                    all_dbs = adapter.get_databases(self.current_connection)
+                    # Filter out system databases
+                    system_dbs = {"master", "tempdb", "model", "msdb"}
+                    databases = [d for d in all_dbs if d.lower() not in system_dbs]
             else:
-                cursor.execute(
-                    "SELECT name FROM sys.databases WHERE database_id > 4 ORDER BY name"
-                )
-                databases = [row[0] for row in cursor.fetchall()]
+                # Single database systems like SQLite
+                databases = [None]
 
             for database in databases:
                 try:
-                    cursor.execute(
-                        f"SELECT TABLE_NAME FROM [{database}].INFORMATION_SCHEMA.TABLES "
-                        f"WHERE TABLE_TYPE = 'BASE TABLE'"
-                    )
-                    for row in cursor.fetchall():
-                        table_name = row[0]
-                        full_name = f"[{database}].[dbo].[{table_name}]"
+                    # Load tables
+                    tables = adapter.get_tables(self.current_connection, database)
+                    for table_name in tables:
                         self._schema_cache["tables"].append(table_name)
-                        self._schema_cache["tables"].append(full_name)
+                        if database:
+                            full_name = f"{adapter.quote_identifier(database)}.{adapter.quote_identifier(table_name)}"
+                            self._schema_cache["tables"].append(full_name)
 
-                        cursor.execute(
-                            f"SELECT COLUMN_NAME FROM [{database}].INFORMATION_SCHEMA.COLUMNS "
-                            f"WHERE TABLE_NAME = ?",
-                            (table_name,),
-                        )
-                        cols = [r[0] for r in cursor.fetchall()]
-                        self._schema_cache["columns"][table_name.lower()] = cols
+                        # Load columns for each table
+                        columns = adapter.get_columns(self.current_connection, table_name, database)
+                        self._schema_cache["columns"][table_name.lower()] = [c.name for c in columns]
 
-                    cursor.execute(
-                        f"SELECT TABLE_NAME FROM [{database}].INFORMATION_SCHEMA.VIEWS"
-                    )
-                    for row in cursor.fetchall():
-                        view_name = row[0]
-                        full_name = f"[{database}].[dbo].[{view_name}]"
+                    # Load views
+                    views = adapter.get_views(self.current_connection, database)
+                    for view_name in views:
                         self._schema_cache["views"].append(view_name)
-                        self._schema_cache["views"].append(full_name)
+                        if database:
+                            full_name = f"{adapter.quote_identifier(database)}.{adapter.quote_identifier(view_name)}"
+                            self._schema_cache["views"].append(full_name)
 
-                        cursor.execute(
-                            f"SELECT COLUMN_NAME FROM [{database}].INFORMATION_SCHEMA.COLUMNS "
-                            f"WHERE TABLE_NAME = ?",
-                            (view_name,),
-                        )
-                        cols = [r[0] for r in cursor.fetchall()]
-                        self._schema_cache["columns"][view_name.lower()] = cols
+                        # Load columns for each view
+                        columns = adapter.get_columns(self.current_connection, view_name, database)
+                        self._schema_cache["columns"][view_name.lower()] = [c.name for c in columns]
 
-                    cursor.execute(
-                        f"SELECT ROUTINE_NAME FROM [{database}].INFORMATION_SCHEMA.ROUTINES "
-                        f"WHERE ROUTINE_TYPE = 'PROCEDURE'"
-                    )
-                    for row in cursor.fetchall():
-                        self._schema_cache["procedures"].append(row[0])
+                    # Load procedures (if supported)
+                    if adapter.supports_stored_procedures:
+                        procedures = adapter.get_procedures(self.current_connection, database)
+                        self._schema_cache["procedures"].extend(procedures)
 
                 except Exception:
                     pass
 
-            self._schema_cache["tables"] = list(
-                dict.fromkeys(self._schema_cache["tables"])
-            )
+            # Deduplicate
+            self._schema_cache["tables"] = list(dict.fromkeys(self._schema_cache["tables"]))
             self._schema_cache["views"] = list(dict.fromkeys(self._schema_cache["views"]))
-            self._schema_cache["procedures"] = list(
-                dict.fromkeys(self._schema_cache["procedures"])
-            )
+            self._schema_cache["procedures"] = list(dict.fromkeys(self._schema_cache["procedures"]))
 
         except Exception as e:
             self.notify(f"Error loading schema: {e}", severity="warning")
 
     def action_disconnect(self) -> None:
-        """Disconnect from current server."""
+        """Disconnect from current database."""
         if self.current_connection:
             try:
                 self.current_connection.close()
@@ -1063,6 +1055,7 @@ class SSMSTUI(App):
                 pass
             self.current_connection = None
             self.current_config = None
+            self.current_adapter = None
 
             status = self.query_one("#status-bar", Static)
             status.update("Disconnected")
@@ -1072,8 +1065,8 @@ class SSMSTUI(App):
 
     def action_execute_query(self) -> None:
         """Execute the current query."""
-        if not self.current_connection:
-            self.notify("Not connected to a server", severity="warning")
+        if not self.current_connection or not self.current_adapter:
+            self.notify("Not connected to a database", severity="warning")
             return
 
         query_input = self.query_one("#query-input", TextArea)
@@ -1087,37 +1080,101 @@ class SSMSTUI(App):
         results_table.clear(columns=True)
 
         try:
-            cursor = self.current_connection.cursor()
-            cursor.execute(query)
+            # Detect query type to avoid double execution
+            query_type = query.strip().upper().split()[0] if query.strip() else ""
+            is_select_query = query_type in ("SELECT", "WITH", "SHOW", "DESCRIBE", "EXPLAIN", "PRAGMA")
 
-            if cursor.description:
-                columns = [col[0] for col in cursor.description]
-                rows = cursor.fetchmany(1000)
+            if is_select_query:
+                columns, rows = self.current_adapter.execute_query(self.current_connection, query)
                 row_count = len(rows)
 
-                try:
-                    while cursor.fetchone():
-                        row_count += 1
-                except Exception:
-                    pass
-
                 results_table.add_columns(*columns)
-                for row in rows:
+                for row in rows[:1000]:  # Limit to 1000 rows displayed
                     str_row = tuple(str(v) if v is not None else "NULL" for v in row)
                     results_table.add_row(*str_row)
 
                 self.notify(f"Query returned {row_count} rows")
             else:
-                affected = cursor.rowcount
-                self.current_connection.commit()
+                # Non-query statement (INSERT, UPDATE, DELETE, CREATE, DROP, etc.)
+                affected = self.current_adapter.execute_non_query(self.current_connection, query)
                 results_table.add_column("Result")
                 results_table.add_row(f"{affected} row(s) affected")
                 self.notify(f"Query executed: {affected} row(s) affected")
+
+            # Save to history on successful execution
+            if self.current_config:
+                from .config import save_query_to_history
+                save_query_to_history(self.current_config.name, query)
 
         except Exception as e:
             results_table.add_column("Error")
             results_table.add_row(str(e))
             self.notify(f"Query error: {e}", severity="error")
+
+    def action_clear_query(self) -> None:
+        """Clear the query input."""
+        query_input = self.query_one("#query-input", TextArea)
+        query_input.text = ""
+
+    def action_new_query(self) -> None:
+        """Start a new query (clear input and results)."""
+        query_input = self.query_one("#query-input", TextArea)
+        query_input.text = ""
+        results_table = self.query_one("#results-table", DataTable)
+        results_table.clear(columns=True)
+
+    def action_show_history(self) -> None:
+        """Show query history for the current connection."""
+        if not self.current_config:
+            self.notify("Not connected to a database", severity="warning")
+            return
+
+        from .config import load_query_history
+        from .screens import QueryHistoryScreen
+
+        history = load_query_history(self.current_config.name)
+        self.push_screen(
+            QueryHistoryScreen(history, self.current_config.name),
+            self._handle_history_result,
+        )
+
+    def _handle_history_result(self, result) -> None:
+        """Handle the result from the history screen."""
+        if result is None:
+            return
+
+        action, data = result
+        if action == "select":
+            query_input = self.query_one("#query-input", TextArea)
+            query_input.text = data
+        elif action == "delete":
+            # Delete the entry from history
+            self._delete_history_entry(data)
+            # Re-open history screen
+            self.action_show_history()
+
+    def _delete_history_entry(self, timestamp: str) -> None:
+        """Delete a specific history entry by timestamp."""
+        from .config import HISTORY_PATH
+        import json
+
+        if not HISTORY_PATH.exists():
+            return
+
+        try:
+            with open(HISTORY_PATH, "r", encoding="utf-8") as f:
+                entries = json.load(f)
+
+            # Remove entry with matching timestamp and connection
+            entries = [
+                e for e in entries
+                if not (e.get("timestamp") == timestamp and e.get("connection_name") == self.current_config.name)
+            ]
+
+            with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+                json.dump(entries, f, indent=2)
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     def action_delete_connection(self) -> None:
         """Delete the selected connection."""
@@ -1167,7 +1224,10 @@ class SSMSTUI(App):
         self.notify("Refreshed")
 
     def action_select_table(self) -> None:
-        """Generate and execute SELECT TOP 100 query for selected table/view."""
+        """Generate and execute SELECT query for selected table/view."""
+        if not self.current_adapter:
+            return
+
         tree = self.query_one("#object-tree", Tree)
         node = tree.cursor_node
 
@@ -1181,7 +1241,7 @@ class SSMSTUI(App):
         db_name = data[1]
         obj_name = data[2]
         query_input = self.query_one("#query-input", TextArea)
-        query_input.text = f"SELECT TOP 100 * FROM [{db_name}].[dbo].[{obj_name}]"
+        query_input.text = self.current_adapter.build_select_query(obj_name, 100, db_name)
         self.action_execute_query()
 
     def _update_footer_bindings(self) -> None:
@@ -1236,6 +1296,9 @@ class SSMSTUI(App):
                 left_bindings.append(KeyBinding("i", "Insert Mode", "enter_insert_mode"))
                 if self.current_connection:
                     left_bindings.append(KeyBinding("enter", "Execute", "execute_query"))
+                    left_bindings.append(KeyBinding("h", "History", "show_history"))
+                left_bindings.append(KeyBinding("d", "Clear", "clear_query"))
+                left_bindings.append(KeyBinding("n", "New", "new_query"))
             else:
                 left_bindings.append(KeyBinding("esc", "Normal Mode", "exit_insert_mode"))
 
@@ -1273,6 +1336,9 @@ class SSMSTUI(App):
   i        Enter INSERT mode
   esc      Exit to NORMAL mode
   enter    Execute query (NORMAL)
+  h        Query history
+  d        Clear query
+  n        New query (clear all)
 
 [bold]Panes (NORMAL mode):[/]
   e        Object Explorer

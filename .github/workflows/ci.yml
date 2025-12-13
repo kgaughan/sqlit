@@ -33,3 +33,277 @@ jobs:
       - name: Verify CLI entry point
         run: |
           python -c "from sqlit.cli import main; print('CLI import OK')"
+
+  test-sqlite:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Run SQLite integration tests
+        run: |
+          pytest tests/ -v -k sqlite --timeout=60
+
+  test-mssql:
+    runs-on: ubuntu-latest
+    needs: build
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: TestPassword123!
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPassword123!' -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ODBC driver
+        run: |
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+          curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+
+      - name: Wait for SQL Server to be ready
+        run: |
+          for i in {1..30}; do
+            if /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPassword123!' -C -Q "SELECT 1" &> /dev/null; then
+              echo "SQL Server is ready"
+              break
+            fi
+            echo "Waiting for SQL Server... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run SQL Server integration tests
+        env:
+          MSSQL_HOST: localhost
+          MSSQL_PORT: 1433
+          MSSQL_USER: sa
+          MSSQL_PASSWORD: TestPassword123!
+        run: |
+          pytest tests/ -v -k mssql --timeout=120
+
+  test-postgresql:
+    runs-on: ubuntu-latest
+    needs: build
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: TestPassword123!
+          POSTGRES_DB: test_sqlit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U testuser -d test_sqlit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 10s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install psycopg2-binary
+
+      - name: Run PostgreSQL integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: TestPassword123!
+          POSTGRES_DATABASE: test_sqlit
+        run: |
+          pytest tests/ -v -k "PostgreSQL" --timeout=120
+
+  test-mysql:
+    runs-on: ubuntu-latest
+    needs: build
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: TestPassword123!
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: TestPassword123!
+          MYSQL_DATABASE: test_sqlit
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u testuser -pTestPassword123!"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install mysql-connector-python
+
+      - name: Run MySQL integration tests
+        env:
+          MYSQL_HOST: localhost
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: TestPassword123!
+          MYSQL_DATABASE: test_sqlit
+        run: |
+          pytest tests/ -v -k "MySQL" --timeout=120
+
+  test-all:
+    runs-on: ubuntu-latest
+    needs: [test-sqlite, test-mssql, test-postgresql, test-mysql]
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: TestPassword123!
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPassword123!' -C -Q 'SELECT 1' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: TestPassword123!
+          POSTGRES_DB: test_sqlit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U testuser -d test_sqlit"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 10s
+
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: TestPassword123!
+          MYSQL_USER: testuser
+          MYSQL_PASSWORD: TestPassword123!
+          MYSQL_DATABASE: test_sqlit
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -u testuser -pTestPassword123!"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ODBC driver
+        run: |
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+          curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]"
+          pip install psycopg2-binary mysql-connector-python
+
+      - name: Wait for SQL Server to be ready
+        run: |
+          for i in {1..30}; do
+            if /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'TestPassword123!' -C -Q "SELECT 1" &> /dev/null; then
+              echo "SQL Server is ready"
+              break
+            fi
+            echo "Waiting for SQL Server... ($i/30)"
+            sleep 2
+          done
+
+      - name: Run all integration tests
+        env:
+          MSSQL_HOST: localhost
+          MSSQL_PORT: 1433
+          MSSQL_USER: sa
+          MSSQL_PASSWORD: TestPassword123!
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: TestPassword123!
+          POSTGRES_DATABASE: test_sqlit
+          MYSQL_HOST: localhost
+          MYSQL_PORT: 3306
+          MYSQL_USER: root
+          MYSQL_PASSWORD: TestPassword123!
+          MYSQL_DATABASE: test_sqlit
+        run: |
+          pytest tests/ -v --timeout=120

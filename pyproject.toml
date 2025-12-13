@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sqlit-tui"
-version = "0.1.1"
-description = "A terminal UI for SQL Server"
+version = "0.2.0"
+description = "A terminal UI for SQL Server, PostgreSQL, MySQL, and SQLite"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "Peter" }
 ]
-keywords = ["sql", "server", "tui", "database", "mssql", "terminal"]
+keywords = ["sql", "server", "tui", "database", "mssql", "postgresql", "mysql", "sqlite", "terminal"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -31,6 +31,17 @@ dependencies = [
     "pyodbc>=5.0.0",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0",
+    "pytest-timeout>=2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-timeout>=2.0",
+    "build",
+]
+
 [project.scripts]
 sqlit = "sqlit.cli:main"
 
@@ -41,3 +52,15 @@ Issues = "https://github.com/Maxteabag/sqlit/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sqlit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v"
+markers = [
+    "sqlite: SQLite database tests",
+    "mssql: SQL Server database tests",
+    "postgresql: PostgreSQL database tests",
+    "mysql: MySQL database tests",
+]
