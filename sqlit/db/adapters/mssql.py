@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .base import ColumnInfo, DatabaseAdapter
+from .base import ColumnInfo, DatabaseAdapter, TableInfo
 
 if TYPE_CHECKING:
     from ...config import ConnectionConfig
@@ -25,6 +25,10 @@ class SQLServerAdapter(DatabaseAdapter):
     def supports_stored_procedures(self) -> bool:
         return True
 
+    @property
+    def default_schema(self) -> str:
+        return "dbo"
+
     def connect(self, config: "ConnectionConfig") -> Any:
         """Connect to SQL Server using pyodbc."""
         import pyodbc
@@ -38,51 +42,53 @@ class SQLServerAdapter(DatabaseAdapter):
         cursor.execute("SELECT name FROM sys.databases ORDER BY name")
         return [row[0] for row in cursor.fetchall()]
 
-    def get_tables(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of tables from SQL Server."""
+    def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of tables with schema from SQL Server."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
-                f"SELECT TABLE_NAME FROM [{database}].INFORMATION_SCHEMA.TABLES "
-                f"WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"
+                f"SELECT TABLE_SCHEMA, TABLE_NAME FROM [{database}].INFORMATION_SCHEMA.TABLES "
+                f"WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME"
             )
         else:
             cursor.execute(
-                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
-                "WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"
+                "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES "
+                "WHERE TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_SCHEMA, TABLE_NAME"
             )
-        return [row[0] for row in cursor.fetchall()]
+        return [(row[0], row[1]) for row in cursor.fetchall()]
 
-    def get_views(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of views from SQL Server."""
+    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of views with schema from SQL Server."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
-                f"SELECT TABLE_NAME FROM [{database}].INFORMATION_SCHEMA.VIEWS "
-                f"ORDER BY TABLE_NAME"
+                f"SELECT TABLE_SCHEMA, TABLE_NAME FROM [{database}].INFORMATION_SCHEMA.VIEWS "
+                f"ORDER BY TABLE_SCHEMA, TABLE_NAME"
             )
         else:
             cursor.execute(
-                "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS ORDER BY TABLE_NAME"
+                "SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.VIEWS "
+                "ORDER BY TABLE_SCHEMA, TABLE_NAME"
             )
-        return [row[0] for row in cursor.fetchall()]
+        return [(row[0], row[1]) for row in cursor.fetchall()]
 
     def get_columns(
-        self, conn: Any, table: str, database: str | None = None
+        self, conn: Any, table: str, database: str | None = None, schema: str | None = None
     ) -> list[ColumnInfo]:
         """Get columns for a table from SQL Server."""
         cursor = conn.cursor()
+        schema = schema or "dbo"
         if database:
             cursor.execute(
                 f"SELECT COLUMN_NAME, DATA_TYPE FROM [{database}].INFORMATION_SCHEMA.COLUMNS "
-                f"WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
-                (table,),
+                f"WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
+                (schema, table),
             )
         else:
             cursor.execute(
                 "SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS "
-                "WHERE TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
-                (table,),
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ORDER BY ORDINAL_POSITION",
+                (schema, table),
             )
         return [ColumnInfo(name=row[0], data_type=row[1]) for row in cursor.fetchall()]
 
@@ -102,26 +108,40 @@ class SQLServerAdapter(DatabaseAdapter):
         return [row[0] for row in cursor.fetchall()]
 
     def quote_identifier(self, name: str) -> str:
-        """Quote identifier using SQL Server brackets."""
-        return f"[{name}]"
+        """Quote identifier using SQL Server brackets.
+
+        Escapes embedded ] by doubling them.
+        """
+        escaped = name.replace("]", "]]")
+        return f"[{escaped}]"
 
     def build_select_query(
-        self, table: str, limit: int, database: str | None = None
+        self, table: str, limit: int, database: str | None = None, schema: str | None = None
     ) -> str:
         """Build SELECT TOP query for SQL Server."""
+        schema = schema or "dbo"
         if database:
-            return f"SELECT TOP {limit} * FROM [{database}].[dbo].[{table}]"
-        return f"SELECT TOP {limit} * FROM [{table}]"
+            return f"SELECT TOP {limit} * FROM [{database}].[{schema}].[{table}]"
+        return f"SELECT TOP {limit} * FROM [{schema}].[{table}]"
 
-    def execute_query(self, conn: Any, query: str) -> tuple[list[str], list[tuple]]:
-        """Execute a query on SQL Server."""
+    def execute_query(
+        self, conn: Any, query: str, max_rows: int | None = None
+    ) -> tuple[list[str], list[tuple], bool]:
+        """Execute a query on SQL Server with optional row limit."""
         cursor = conn.cursor()
         cursor.execute(query)
         if cursor.description:
             columns = [col[0] for col in cursor.description]
-            rows = cursor.fetchall()
-            return columns, [tuple(row) for row in rows]
-        return [], []
+            if max_rows is not None:
+                rows = cursor.fetchmany(max_rows + 1)
+                truncated = len(rows) > max_rows
+                if truncated:
+                    rows = rows[:max_rows]
+            else:
+                rows = cursor.fetchall()
+                truncated = False
+            return columns, [tuple(row) for row in rows], truncated
+        return [], [], False
 
     def execute_non_query(self, conn: Any, query: str) -> int:
         """Execute a non-query on SQL Server."""

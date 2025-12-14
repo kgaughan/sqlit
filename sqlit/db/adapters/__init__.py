@@ -1,6 +1,6 @@
 """Database adapters for sqlit - abstraction layer for different database types."""
 
-from .base import ColumnInfo, DatabaseAdapter
+from .base import ColumnInfo, DatabaseAdapter, TableInfo
 from .cockroachdb import CockroachDBAdapter
 from .duckdb import DuckDBAdapter
 from .mariadb import MariaDBAdapter
@@ -14,6 +14,7 @@ __all__ = [
     # Base
     "ColumnInfo",
     "DatabaseAdapter",
+    "TableInfo",
     # Adapters
     "CockroachDBAdapter",
     "DuckDBAdapter",

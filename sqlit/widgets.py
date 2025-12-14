@@ -37,6 +37,10 @@ class ContextFooter(Horizontal):
         padding: 0 1;
     }
 
+    ContextFooter.hidden {
+        display: none;
+    }
+
     #footer-left {
         width: 1fr;
         height: 1;
@@ -77,7 +81,11 @@ class ContextFooter(Horizontal):
 
 
 class Dialog(Container):
-    """A styled modal dialog container with optional border title/subtitle."""
+    """A styled modal dialog container with optional border title/subtitle.
+
+    The shortcuts parameter accepts a list of (action, key) tuples that will be
+    formatted consistently as "action: [bold]key[/]" in the subtitle.
+    """
 
     DEFAULT_CSS = """
     Dialog {
@@ -98,20 +106,30 @@ class Dialog(Container):
         border-subtitle-align: right;
         border-subtitle-color: $primary;
         border-subtitle-background: $surface;
-        border-subtitle-style: bold;
+        border-subtitle-style: none;
     }
     """
 
     def __init__(
         self,
         title: str | None = None,
-        subtitle: str | None = None,
+        shortcuts: list[tuple[str, str]] | None = None,
         **kwargs,
     ):
+        """Initialize the dialog.
+
+        Args:
+            title: The dialog title (shown in border title).
+            shortcuts: List of (action, key) tuples for the subtitle.
+                       Example: [("Save", "^S"), ("Cancel", "Esc")]
+        """
         super().__init__(**kwargs)
         if title is not None:
             self.border_title = title
-        if subtitle is not None:
+        if shortcuts:
+            subtitle = "  ".join(
+                f"{action}: [bold]{key}[/]" for action, key in shortcuts
+            )
             self.border_subtitle = subtitle
 
 

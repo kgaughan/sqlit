@@ -198,6 +198,7 @@ class SSMSTUI(
         Binding("y", "copy_cell", "Copy cell", show=False),
         Binding("Y", "copy_row", "Copy row", show=False),
         Binding("a", "copy_results", "Copy results", show=False),
+        Binding("ctrl+c", "cancel_operation", "Cancel", show=False),
     ]
 
     def __init__(self):
@@ -226,6 +227,51 @@ class SSMSTUI(
         self._internal_clipboard: str = ""
         self._fullscreen_mode: str = "none"
         self._connection_health: dict[str, bool] = {}
+        self._query_worker = None
+        self._query_executing: bool = False
+        self._spinner_index: int = 0
+        self._spinner_timer = None
+        # Schema indexing state
+        self._schema_indexing: bool = False
+        self._schema_worker = None
+        self._schema_spinner_index: int = 0
+        self._schema_spinner_timer = None
+        self._table_metadata: dict = {}
+
+    def push_screen(self, screen, callback=None, wait_for_dismiss: bool = False):
+        """Override push_screen to hide footer when showing modal dialogs."""
+        from textual.screen import ModalScreen
+
+        if isinstance(screen, ModalScreen):
+            self._hide_footer()
+        return super().push_screen(screen, callback, wait_for_dismiss=wait_for_dismiss)
+
+    def pop_screen(self):
+        """Override pop_screen to restore footer when closing modal dialogs."""
+        result = super().pop_screen()
+        # Check if we're back to the main screen (no modal screens)
+        if not any(
+            hasattr(s, "__class__") and "ModalScreen" in str(s.__class__.__mro__)
+            for s in self.screen_stack[1:]  # Skip the base screen
+        ):
+            self._show_footer()
+        return result
+
+    def _hide_footer(self) -> None:
+        """Hide the context footer."""
+        try:
+            footer = self.query_one(ContextFooter)
+            footer.add_class("hidden")
+        except Exception:
+            pass
+
+    def _show_footer(self) -> None:
+        """Show the context footer."""
+        try:
+            footer = self.query_one(ContextFooter)
+            footer.remove_class("hidden")
+        except Exception:
+            pass
 
     def check_action(self, action: str, parameters: tuple) -> bool | None:
         """Only allow actions when their context is active."""

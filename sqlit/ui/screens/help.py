@@ -43,7 +43,7 @@ class HelpScreen(ModalScreen):
         self.help_text = help_text
 
     def compose(self) -> ComposeResult:
-        with Dialog(id="help-dialog", title="Help", subtitle="Esc Close"):
+        with Dialog(id="help-dialog", title="Help", shortcuts=[("Close", "Esc")]):
             with VerticalScroll(id="help-scroll"):
                 yield Static(self.help_text)
 

@@ -26,6 +26,7 @@ venv/
 docker-compose.yml
 init.sql
 *.tape
+.tmp/
 
 # AUR build artifacts
 aur/*.tar.gz

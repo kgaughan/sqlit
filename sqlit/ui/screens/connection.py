@@ -472,11 +472,9 @@ class ConnectionScreen(ModalScreen):
         title = "Edit Connection" if self.editing else "New Connection"
         db_type = self._get_initial_db_type()
 
-        with Dialog(
-            id="connection-dialog",
-            title=title,
-            subtitle="^T Test  ^S Save  Esc Cancel",
-        ):
+        shortcuts = [("Test", "^T"), ("Save", "^S"), ("Cancel", "Esc")]
+
+        with Dialog(id="connection-dialog", title=title, shortcuts=shortcuts):
 
             with TabbedContent(id="connection-tabs"):
                 with TabPane("General", id="tab-general"):

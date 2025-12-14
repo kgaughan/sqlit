@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container
 from textual.screen import ModalScreen
 from textual.widgets import Static, TextArea
+
+from ...widgets import Dialog
 
 
 class ValueViewScreen(ModalScreen):
@@ -27,27 +28,11 @@ class ValueViewScreen(ModalScreen):
     #value-dialog {
         width: 90;
         height: 70%;
-        border: solid $primary;
-        background: $surface;
-        padding: 1 2;
-    }
-
-    #value-title {
-        text-align: center;
-        text-style: bold;
-        margin-bottom: 1;
     }
 
     #value-text {
         height: 1fr;
         border: solid $primary-darken-2;
-    }
-
-    #value-footer {
-        height: 1;
-        margin-top: 1;
-        text-align: center;
-        color: $text-muted;
     }
     """
 
@@ -57,10 +42,9 @@ class ValueViewScreen(ModalScreen):
         self.title = title
 
     def compose(self) -> ComposeResult:
-        with Container(id="value-dialog"):
-            yield Static(self.title, id="value-title")
+        shortcuts = [("Copy", "Y"), ("Close", "Esc")]
+        with Dialog(id="value-dialog", title=self.title, shortcuts=shortcuts):
             yield TextArea(self.value, id="value-text", read_only=True)
-            yield Static(r"[bold]\[Y][/] Copy  [bold]\[Esc][/] Close", id="value-footer")
 
     def on_mount(self) -> None:
         self.query_one("#value-text", TextArea).focus()

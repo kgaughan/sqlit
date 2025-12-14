@@ -111,12 +111,32 @@ class UINavigationMixin:
     def _update_status_bar(self) -> None:
         """Update status bar with connection and vim mode info."""
         from ...widgets import VimMode
+        from .query import SPINNER_FRAMES
 
         status = self.query_one("#status-bar", Static)
         conn_info = "Not connected"
         if self.current_config:
             display_info = self.current_config.get_display_info()
             conn_info = f"[#90EE90]Connected to {self.current_config.name}[/] ({display_info})"
+
+        # Build status indicators
+        status_parts = []
+
+        # Check if schema is indexing
+        if getattr(self, "_schema_indexing", False):
+            spinner_idx = getattr(self, "_schema_spinner_index", 0)
+            spinner = SPINNER_FRAMES[spinner_idx % len(SPINNER_FRAMES)]
+            status_parts.append(f"[bold cyan]{spinner} Indexing...[/]")
+
+        # Check if query is executing
+        if getattr(self, "_query_executing", False):
+            spinner_idx = getattr(self, "_spinner_index", 0)
+            spinner = SPINNER_FRAMES[spinner_idx % len(SPINNER_FRAMES)]
+            status_parts.append(f"[bold yellow]{spinner} Running...[/]")
+
+        status_str = "  ".join(status_parts)
+        if status_str:
+            status_str += "  "
 
         try:
             query_input = self.query_one("#query-input", TextArea)
@@ -125,11 +145,11 @@ class UINavigationMixin:
                     mode_str = f"[bold orange1]-- {self.vim_mode.value} --[/]"
                 else:
                     mode_str = f"[dim]-- {self.vim_mode.value} --[/]"
-                status.update(f"{mode_str}  {conn_info}")
+                status.update(f"{status_str}{mode_str}  {conn_info}")
             else:
-                status.update(conn_info)
+                status.update(f"{status_str}{conn_info}")
         except Exception:
-            status.update(conn_info)
+            status.update(f"{status_str}{conn_info}")
 
     def action_toggle_fullscreen(self) -> None:
         """Toggle fullscreen for the currently focused pane."""

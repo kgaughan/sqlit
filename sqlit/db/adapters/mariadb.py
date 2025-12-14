@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from .base import ColumnInfo, MySQLBaseAdapter
+from .base import ColumnInfo, MySQLBaseAdapter, TableInfo
 
 if TYPE_CHECKING:
     from ...config import ConnectionConfig
@@ -37,8 +37,8 @@ class MariaDBAdapter(MySQLBaseAdapter):
 
     # MariaDB connector uses ? placeholders instead of %s, so override methods with params
 
-    def get_tables(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of tables from MariaDB."""
+    def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of tables from MariaDB. Returns (schema, name) with empty schema."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
@@ -49,10 +49,10 @@ class MariaDBAdapter(MySQLBaseAdapter):
             )
         else:
             cursor.execute("SHOW TABLES")
-        return [row[0] for row in cursor.fetchall()]
+        return [("", row[0]) for row in cursor.fetchall()]
 
-    def get_views(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of views from MariaDB."""
+    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of views from MariaDB. Returns (schema, name) with empty schema."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
@@ -65,12 +65,12 @@ class MariaDBAdapter(MySQLBaseAdapter):
                 "SELECT table_name FROM information_schema.views "
                 "WHERE table_schema = DATABASE() ORDER BY table_name"
             )
-        return [row[0] for row in cursor.fetchall()]
+        return [("", row[0]) for row in cursor.fetchall()]
 
     def get_columns(
-        self, conn: Any, table: str, database: str | None = None
+        self, conn: Any, table: str, database: str | None = None, schema: str | None = None
     ) -> list[ColumnInfo]:
-        """Get columns for a table from MariaDB."""
+        """Get columns for a table from MariaDB. Schema parameter is ignored."""
         cursor = conn.cursor()
         if database:
             cursor.execute(

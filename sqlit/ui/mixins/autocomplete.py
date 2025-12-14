@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from textual.timer import Timer
 from textual.widgets import TextArea
+from textual.worker import Worker
 
 if TYPE_CHECKING:
     from ...config import ConnectionConfig
     from ...widgets import VimMode
+
+# Spinner frames for loading animation
+SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 
 class AutocompleteMixin:
@@ -25,6 +30,13 @@ class AutocompleteMixin:
     _autocomplete_index: int
     _autocomplete_filter: str
     _autocomplete_just_applied: bool
+    # Schema indexing state
+    _schema_indexing: bool
+    _schema_worker: Worker | None
+    _schema_spinner_index: int
+    _schema_spinner_timer: Timer | None
+    # Table metadata for lazy column loading: {display_name.lower(): (schema, table, database)}
+    _table_metadata: dict[str, tuple[str, str, str | None]]
 
     def _get_word_before_cursor(self, text: str, cursor_pos: int) -> tuple[str, str]:
         """Get the current word being typed and the context keyword before it."""
@@ -68,6 +80,9 @@ class AutocompleteMixin:
             suggestions = self._schema_cache["procedures"]
         elif context.startswith("column:"):
             table_name = context.split(":", 1)[1].lower()
+            # Lazy load columns if not cached
+            if table_name not in self._schema_cache["columns"]:
+                self._load_columns_for_table(table_name)
             suggestions = self._schema_cache["columns"].get(table_name, [])
         elif context == "column_or_table":
             all_columns = []
@@ -80,6 +95,30 @@ class AutocompleteMixin:
             suggestions = [s for s in suggestions if s.lower().startswith(word_lower)]
 
         return suggestions[:50]
+
+    def _load_columns_for_table(self, table_name: str) -> None:
+        """Lazy load columns for a specific table."""
+        if not self.current_connection or not self.current_adapter:
+            return
+
+        # Check if we have metadata for this table
+        metadata = self._table_metadata.get(table_name)
+        if not metadata:
+            return
+
+        schema_name, actual_table_name, database = metadata
+        adapter = self.current_adapter
+        connection = self.current_connection
+
+        try:
+            columns = adapter.get_columns(connection, actual_table_name, database, schema_name)
+            column_names = [c.name for c in columns]
+            self._schema_cache["columns"][table_name] = column_names
+            # Also cache by actual table name
+            self._schema_cache["columns"][actual_table_name.lower()] = column_names
+        except Exception:
+            # Cache empty list to avoid repeated attempts
+            self._schema_cache["columns"][table_name] = []
 
     def _show_autocomplete(self, suggestions: list[str], filter_text: str) -> None:
         """Show the autocomplete dropdown with suggestions."""
@@ -234,26 +273,99 @@ class AutocompleteMixin:
             self._hide_autocomplete()
 
     def _load_schema_cache(self) -> None:
-        """Load database schema for autocomplete."""
+        """Load database schema for autocomplete asynchronously."""
         if not self.current_connection or not self.current_config or not self.current_adapter:
             return
 
+        # Cancel any existing schema worker
+        if hasattr(self, "_schema_worker") and self._schema_worker is not None:
+            self._schema_worker.cancel()
+
+        # Initialize empty cache immediately
         self._schema_cache = {
             "tables": [],
             "views": [],
             "columns": {},
             "procedures": [],
         }
+        self._table_metadata = {}
+
+        # Start schema indexing spinner
+        self._start_schema_spinner()
+
+        # Run schema loading in background thread
+        self._schema_worker = self.run_worker(
+            self._load_schema_cache_async(),
+            name="schema_cache_loading",
+            exclusive=True,
+        )
+
+    def _start_schema_spinner(self) -> None:
+        """Start the schema indexing spinner animation."""
+        self._schema_indexing = True
+        self._schema_spinner_index = 0
+        self._update_status_bar()
+        # Start timer to animate spinner
+        if hasattr(self, "_schema_spinner_timer") and self._schema_spinner_timer is not None:
+            self._schema_spinner_timer.stop()
+        self._schema_spinner_timer = self.set_interval(0.1, self._animate_schema_spinner)
+
+    def _stop_schema_spinner(self) -> None:
+        """Stop the schema indexing spinner animation."""
+        self._schema_indexing = False
+        if hasattr(self, "_schema_spinner_timer") and self._schema_spinner_timer is not None:
+            self._schema_spinner_timer.stop()
+            self._schema_spinner_timer = None
+        self._update_status_bar()
+
+    def _animate_schema_spinner(self) -> None:
+        """Update schema spinner animation frame."""
+        if not self._schema_indexing:
+            return
+        self._schema_spinner_index = (self._schema_spinner_index + 1) % len(SPINNER_FRAMES)
+        self._update_status_bar()
+
+    def action_cancel_schema_indexing(self) -> None:
+        """Cancel ongoing schema indexing."""
+        if hasattr(self, "_schema_worker") and self._schema_worker is not None:
+            self._schema_worker.cancel()
+            self._schema_worker = None
+        self._stop_schema_spinner()
+        self.notify("Schema indexing cancelled")
+
+    async def _load_schema_cache_async(self) -> None:
+        """Load database schema asynchronously in a worker thread.
+
+        Only loads tables, views, and procedures. Columns are loaded lazily.
+        """
+        import asyncio
 
         adapter = self.current_adapter
+        connection = self.current_connection
+        config = self.current_config
+
+        if not adapter or not connection or not config:
+            self._stop_schema_spinner()
+            return
+
+        schema_cache: dict = {
+            "tables": [],
+            "views": [],
+            "columns": {},
+            "procedures": [],
+        }
+        table_metadata: dict[str, tuple[str, str, str | None]] = {}
 
         try:
+            # Get database list in thread
             if adapter.supports_multiple_databases:
-                db = self.current_config.database
+                db = config.database
                 if db and db.lower() not in ("", "master"):
                     databases = [db]
                 else:
-                    all_dbs = adapter.get_databases(self.current_connection)
+                    all_dbs = await asyncio.to_thread(
+                        adapter.get_databases, connection
+                    )
                     system_dbs = {"master", "tempdb", "model", "msdb"}
                     databases = [d for d in all_dbs if d.lower() not in system_dbs]
             else:
@@ -261,36 +373,60 @@ class AutocompleteMixin:
 
             for database in databases:
                 try:
-                    tables = adapter.get_tables(self.current_connection, database)
-                    for table_name in tables:
-                        self._schema_cache["tables"].append(table_name)
+                    # Get tables in thread (NO columns - lazy loaded)
+                    tables = await asyncio.to_thread(
+                        adapter.get_tables, connection, database
+                    )
+                    for schema_name, table_name in tables:
+                        display_name = adapter.format_table_name(schema_name, table_name)
+                        schema_cache["tables"].append(display_name)
+                        # Store metadata for lazy column loading
+                        table_metadata[display_name.lower()] = (schema_name, table_name, database)
+                        table_metadata[table_name.lower()] = (schema_name, table_name, database)
                         if database:
-                            full_name = f"{adapter.quote_identifier(database)}.{adapter.quote_identifier(table_name)}"
-                            self._schema_cache["tables"].append(full_name)
+                            full_name = f"{adapter.quote_identifier(database)}.{adapter.quote_identifier(display_name)}"
+                            schema_cache["tables"].append(full_name)
+                            table_metadata[full_name.lower()] = (schema_name, table_name, database)
 
-                        columns = adapter.get_columns(self.current_connection, table_name, database)
-                        self._schema_cache["columns"][table_name.lower()] = [c.name for c in columns]
-
-                    views = adapter.get_views(self.current_connection, database)
-                    for view_name in views:
-                        self._schema_cache["views"].append(view_name)
+                    # Get views in thread (NO columns - lazy loaded)
+                    views = await asyncio.to_thread(
+                        adapter.get_views, connection, database
+                    )
+                    for schema_name, view_name in views:
+                        display_name = adapter.format_table_name(schema_name, view_name)
+                        schema_cache["views"].append(display_name)
+                        # Store metadata for lazy column loading
+                        table_metadata[display_name.lower()] = (schema_name, view_name, database)
+                        table_metadata[view_name.lower()] = (schema_name, view_name, database)
                         if database:
-                            full_name = f"{adapter.quote_identifier(database)}.{adapter.quote_identifier(view_name)}"
-                            self._schema_cache["views"].append(full_name)
-
-                        columns = adapter.get_columns(self.current_connection, view_name, database)
-                        self._schema_cache["columns"][view_name.lower()] = [c.name for c in columns]
+                            full_name = f"{adapter.quote_identifier(database)}.{adapter.quote_identifier(display_name)}"
+                            schema_cache["views"].append(full_name)
+                            table_metadata[full_name.lower()] = (schema_name, view_name, database)
 
                     if adapter.supports_stored_procedures:
-                        procedures = adapter.get_procedures(self.current_connection, database)
-                        self._schema_cache["procedures"].extend(procedures)
+                        procedures = await asyncio.to_thread(
+                            adapter.get_procedures, connection, database
+                        )
+                        schema_cache["procedures"].extend(procedures)
 
                 except Exception:
                     pass
 
-            self._schema_cache["tables"] = list(dict.fromkeys(self._schema_cache["tables"]))
-            self._schema_cache["views"] = list(dict.fromkeys(self._schema_cache["views"]))
-            self._schema_cache["procedures"] = list(dict.fromkeys(self._schema_cache["procedures"]))
+            # Deduplicate
+            schema_cache["tables"] = list(dict.fromkeys(schema_cache["tables"]))
+            schema_cache["views"] = list(dict.fromkeys(schema_cache["views"]))
+            schema_cache["procedures"] = list(dict.fromkeys(schema_cache["procedures"]))
+
+            # Update cache (we're back on main thread after await)
+            self._update_schema_cache(schema_cache, table_metadata)
 
         except Exception as e:
             self.notify(f"Error loading schema: {e}", severity="warning")
+        finally:
+            self._stop_schema_spinner()
+
+    def _update_schema_cache(self, schema_cache: dict, table_metadata: dict | None = None) -> None:
+        """Update the schema cache (called on main thread)."""
+        self._schema_cache = schema_cache
+        if table_metadata is not None:
+            self._table_metadata = table_metadata

@@ -42,6 +42,10 @@ class ColumnInfo:
     data_type: str
 
 
+# Type alias for table/view info: (schema, name)
+TableInfo = tuple[str, str]
+
+
 class DatabaseAdapter(ABC):
     """Abstract base class for database adapters.
 
@@ -67,6 +71,28 @@ class DatabaseAdapter(ABC):
         """Whether this database type supports stored procedures."""
         pass
 
+    @property
+    def default_schema(self) -> str:
+        """The default schema for this database type.
+
+        Override in subclasses. Return empty string if schemas are not supported.
+        """
+        return ""
+
+    def format_table_name(self, schema: str, name: str) -> str:
+        """Format a table name for display, omitting default schema.
+
+        Args:
+            schema: The schema name.
+            name: The table name.
+
+        Returns:
+            Display name - "name" if schema is default, otherwise "schema.name".
+        """
+        if not schema or schema == self.default_schema:
+            return name
+        return f"{schema}.{name}"
+
     @abstractmethod
     def connect(self, config: "ConnectionConfig") -> Any:
         """Create a connection to the database."""
@@ -78,20 +104,35 @@ class DatabaseAdapter(ABC):
         pass
 
     @abstractmethod
-    def get_tables(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of tables in the database."""
+    def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of tables in the database.
+
+        Returns:
+            List of (schema, table_name) tuples.
+        """
         pass
 
     @abstractmethod
-    def get_views(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of views in the database."""
+    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of views in the database.
+
+        Returns:
+            List of (schema, view_name) tuples.
+        """
         pass
 
     @abstractmethod
     def get_columns(
-        self, conn: Any, table: str, database: str | None = None
+        self, conn: Any, table: str, database: str | None = None, schema: str | None = None
     ) -> list[ColumnInfo]:
-        """Get list of columns for a table."""
+        """Get list of columns for a table.
+
+        Args:
+            conn: Database connection.
+            table: Table name.
+            database: Database name (if supported).
+            schema: Schema name (if supported).
+        """
         pass
 
     @abstractmethod
@@ -106,14 +147,33 @@ class DatabaseAdapter(ABC):
 
     @abstractmethod
     def build_select_query(
-        self, table: str, limit: int, database: str | None = None
+        self, table: str, limit: int, database: str | None = None, schema: str | None = None
     ) -> str:
-        """Build a SELECT query with limit."""
+        """Build a SELECT query with limit.
+
+        Args:
+            table: Table name.
+            limit: Maximum rows to return.
+            database: Database name (if supported).
+            schema: Schema name (if supported).
+        """
         pass
 
     @abstractmethod
-    def execute_query(self, conn: Any, query: str) -> tuple[list[str], list[tuple]]:
-        """Execute a query and return (columns, rows)."""
+    def execute_query(
+        self, conn: Any, query: str, max_rows: int | None = None
+    ) -> tuple[list[str], list[tuple], bool]:
+        """Execute a query and return (columns, rows, truncated).
+
+        Args:
+            conn: Database connection.
+            query: SQL query to execute.
+            max_rows: Maximum rows to fetch. None means no limit.
+
+        Returns:
+            Tuple of (column_names, rows, was_truncated).
+            was_truncated is True if there were more rows than max_rows.
+        """
         pass
 
     @abstractmethod
@@ -128,15 +188,25 @@ class CursorBasedAdapter(DatabaseAdapter):
     Provides common implementations for execute_query and execute_non_query.
     """
 
-    def execute_query(self, conn: Any, query: str) -> tuple[list[str], list[tuple]]:
-        """Execute a query using cursor-based approach."""
+    def execute_query(
+        self, conn: Any, query: str, max_rows: int | None = None
+    ) -> tuple[list[str], list[tuple], bool]:
+        """Execute a query using cursor-based approach with optional row limit."""
         cursor = conn.cursor()
         cursor.execute(query)
         if cursor.description:
             columns = [col[0] for col in cursor.description]
-            rows = cursor.fetchall()
-            return columns, [tuple(row) for row in rows]
-        return [], []
+            if max_rows is not None:
+                # Fetch one extra row to detect if there are more
+                rows = cursor.fetchmany(max_rows + 1)
+                truncated = len(rows) > max_rows
+                if truncated:
+                    rows = rows[:max_rows]
+            else:
+                rows = cursor.fetchall()
+                truncated = False
+            return columns, [tuple(row) for row in rows], truncated
+        return [], [], False
 
     def execute_non_query(self, conn: Any, query: str) -> int:
         """Execute a non-query using cursor-based approach."""
@@ -151,6 +221,8 @@ class MySQLBaseAdapter(CursorBasedAdapter):
     """Base class for MySQL-compatible databases (MySQL, MariaDB).
 
     These share the same SQL dialect, information_schema queries, and backtick quoting.
+    Note: MySQL uses "database" and "schema" interchangeably - there are no schemas
+    within a database like in SQL Server or PostgreSQL.
     """
 
     @property
@@ -167,8 +239,8 @@ class MySQLBaseAdapter(CursorBasedAdapter):
         cursor.execute("SHOW DATABASES")
         return [row[0] for row in cursor.fetchall()]
 
-    def get_tables(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of tables."""
+    def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of tables. Returns (schema, name) tuples with empty schema."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
@@ -179,10 +251,11 @@ class MySQLBaseAdapter(CursorBasedAdapter):
             )
         else:
             cursor.execute("SHOW TABLES")
-        return [row[0] for row in cursor.fetchall()]
+        # MySQL doesn't have schemas within databases, so schema is empty
+        return [("", row[0]) for row in cursor.fetchall()]
 
-    def get_views(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of views."""
+    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of views. Returns (schema, name) tuples with empty schema."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
@@ -195,12 +268,12 @@ class MySQLBaseAdapter(CursorBasedAdapter):
                 "SELECT table_name FROM information_schema.views "
                 "WHERE table_schema = DATABASE() ORDER BY table_name"
             )
-        return [row[0] for row in cursor.fetchall()]
+        return [("", row[0]) for row in cursor.fetchall()]
 
     def get_columns(
-        self, conn: Any, table: str, database: str | None = None
+        self, conn: Any, table: str, database: str | None = None, schema: str | None = None
     ) -> list[ColumnInfo]:
-        """Get columns for a table."""
+        """Get columns for a table. Schema parameter is ignored (MySQL has no schemas)."""
         cursor = conn.cursor()
         if database:
             cursor.execute(
@@ -237,13 +310,17 @@ class MySQLBaseAdapter(CursorBasedAdapter):
         return [row[0] for row in cursor.fetchall()]
 
     def quote_identifier(self, name: str) -> str:
-        """Quote identifier using backticks for MySQL/MariaDB."""
-        return f"`{name}`"
+        """Quote identifier using backticks for MySQL/MariaDB.
+
+        Escapes embedded backticks by doubling them.
+        """
+        escaped = name.replace("`", "``")
+        return f"`{escaped}`"
 
     def build_select_query(
-        self, table: str, limit: int, database: str | None = None
+        self, table: str, limit: int, database: str | None = None, schema: str | None = None
     ) -> str:
-        """Build SELECT LIMIT query."""
+        """Build SELECT LIMIT query. Schema parameter is ignored (MySQL has no schemas)."""
         if database:
             return f"SELECT * FROM `{database}`.`{table}` LIMIT {limit}"
         return f"SELECT * FROM `{table}` LIMIT {limit}"
@@ -263,44 +340,56 @@ class PostgresBaseAdapter(CursorBasedAdapter):
     def supports_stored_procedures(self) -> bool:
         return True
 
-    def get_tables(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of tables from public schema."""
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' "
-            "ORDER BY table_name"
-        )
-        return [row[0] for row in cursor.fetchall()]
+    @property
+    def default_schema(self) -> str:
+        return "public"
 
-    def get_views(self, conn: Any, database: str | None = None) -> list[str]:
-        """Get list of views from public schema."""
+    def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of tables from all schemas."""
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT table_name FROM information_schema.views "
-            "WHERE table_schema = 'public' ORDER BY table_name"
+            "SELECT table_schema, table_name FROM information_schema.tables "
+            "WHERE table_type = 'BASE TABLE' "
+            "AND table_schema NOT IN ('pg_catalog', 'information_schema') "
+            "ORDER BY table_schema, table_name"
         )
-        return [row[0] for row in cursor.fetchall()]
+        return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of views from all schemas."""
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT table_schema, table_name FROM information_schema.views "
+            "WHERE table_schema NOT IN ('pg_catalog', 'information_schema') "
+            "ORDER BY table_schema, table_name"
+        )
+        return [(row[0], row[1]) for row in cursor.fetchall()]
 
     def get_columns(
-        self, conn: Any, table: str, database: str | None = None
+        self, conn: Any, table: str, database: str | None = None, schema: str | None = None
     ) -> list[ColumnInfo]:
-        """Get columns for a table from public schema."""
+        """Get columns for a table."""
         cursor = conn.cursor()
+        schema = schema or "public"
         cursor.execute(
             "SELECT column_name, data_type FROM information_schema.columns "
-            "WHERE table_schema = 'public' AND table_name = %s "
+            "WHERE table_schema = %s AND table_name = %s "
             "ORDER BY ordinal_position",
-            (table,),
+            (schema, table),
         )
         return [ColumnInfo(name=row[0], data_type=row[1]) for row in cursor.fetchall()]
 
     def quote_identifier(self, name: str) -> str:
-        """Quote identifier using double quotes for PostgreSQL."""
-        return f'"{name}"'
+        """Quote identifier using double quotes for PostgreSQL.
+
+        Escapes embedded double quotes by doubling them.
+        """
+        escaped = name.replace('"', '""')
+        return f'"{escaped}"'
 
     def build_select_query(
-        self, table: str, limit: int, database: str | None = None
+        self, table: str, limit: int, database: str | None = None, schema: str | None = None
     ) -> str:
         """Build SELECT LIMIT query for PostgreSQL."""
-        return f'SELECT * FROM "{table}" LIMIT {limit}'
+        schema = schema or "public"
+        return f'SELECT * FROM "{schema}"."{table}" LIMIT {limit}'

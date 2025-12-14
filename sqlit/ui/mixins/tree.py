@@ -150,8 +150,11 @@ class TreeMixin:
                     parts.append(f"db:{data[1]}")
                 elif data[0] == "folder":
                     parts.append(f"folder:{data[1]}")
-                elif data[0] in ("table", "view"):
-                    parts.append(f"{data[0]}:{data[2]}")
+                elif data[0] in ("table", "view") and len(data) >= 4:
+                    # Include schema in path for uniqueness
+                    schema_name = data[2]
+                    obj_name = data[3]
+                    parts.append(f"{data[0]}:{schema_name}.{obj_name}")
             current = current.parent
         return "/".join(reversed(parts))
 
@@ -210,22 +213,24 @@ class TreeMixin:
             return
 
         try:
-            if data[0] == "table" and len(data) >= 3:
+            if data[0] == "table" and len(data) >= 4:
                 db_name = data[1]
-                table_name = data[2]
-                columns = adapter.get_columns(self.current_connection, table_name, db_name)
+                schema_name = data[2]
+                table_name = data[3]
+                columns = adapter.get_columns(self.current_connection, table_name, db_name, schema_name)
                 for col in columns:
                     child = node.add_leaf(f"[dim]{col.name}[/] [italic dim]{col.data_type}[/]")
-                    child.data = ("column", db_name, table_name, col.name)
+                    child.data = ("column", db_name, schema_name, table_name, col.name)
                 return
 
-            if data[0] == "view" and len(data) >= 3:
+            if data[0] == "view" and len(data) >= 4:
                 db_name = data[1]
-                view_name = data[2]
-                columns = adapter.get_columns(self.current_connection, view_name, db_name)
+                schema_name = data[2]
+                view_name = data[3]
+                columns = adapter.get_columns(self.current_connection, view_name, db_name, schema_name)
                 for col in columns:
                     child = node.add_leaf(f"[dim]{col.name}[/] [italic dim]{col.data_type}[/]")
-                    child.data = ("column", db_name, view_name, col.name)
+                    child.data = ("column", db_name, schema_name, view_name, col.name)
                 return
 
             if data[0] != "folder" or len(data) < 3:
@@ -236,16 +241,18 @@ class TreeMixin:
 
             if folder_type == "tables":
                 tables = adapter.get_tables(self.current_connection, db_name)
-                for table_name in tables:
-                    child = node.add(table_name)
-                    child.data = ("table", db_name, table_name)
+                for schema_name, table_name in tables:
+                    display_name = adapter.format_table_name(schema_name, table_name)
+                    child = node.add(display_name)
+                    child.data = ("table", db_name, schema_name, table_name)
                     child.allow_expand = True
 
             elif folder_type == "views":
                 views = adapter.get_views(self.current_connection, db_name)
-                for view_name in views:
-                    child = node.add(view_name)
-                    child.data = ("view", db_name, view_name)
+                for schema_name, view_name in views:
+                    display_name = adapter.format_table_name(schema_name, view_name)
+                    child = node.add(display_name)
+                    child.data = ("view", db_name, schema_name, view_name)
                     child.allow_expand = True
 
             elif folder_type == "procedures":
@@ -308,13 +315,14 @@ class TreeMixin:
             return
 
         data = node.data
-        if data[0] not in ("table", "view"):
+        if data[0] not in ("table", "view") or len(data) < 4:
             return
 
         from textual.widgets import TextArea
 
         db_name = data[1]
-        obj_name = data[2]
+        schema_name = data[2]
+        obj_name = data[3]
         query_input = self.query_one("#query-input", TextArea)
-        query_input.text = self.current_adapter.build_select_query(obj_name, 100, db_name)
+        query_input.text = self.current_adapter.build_select_query(obj_name, 100, db_name, schema_name)
         self.action_execute_query()

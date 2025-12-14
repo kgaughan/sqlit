@@ -45,7 +45,7 @@ class ConnectionStore(JSONFileStore):
             return []
 
     def save_all(self, connections: list["ConnectionConfig"]) -> None:
-        """Save all connections, replacing existing.
+        """Save all connections.
 
         Args:
             connections: List of ConnectionConfig objects to save.

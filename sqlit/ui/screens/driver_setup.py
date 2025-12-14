@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container
 from textual.screen import ModalScreen
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
+
+from ...widgets import Dialog
 
 
 class DriverSetupScreen(ModalScreen):
@@ -29,15 +30,6 @@ class DriverSetupScreen(ModalScreen):
         width: 80;
         height: auto;
         max-height: 90%;
-        border: solid $primary;
-        background: $surface;
-        padding: 1 2;
-    }
-
-    #driver-title {
-        text-align: center;
-        text-style: bold;
-        margin-bottom: 1;
     }
 
     #driver-message {
@@ -60,11 +52,6 @@ class DriverSetupScreen(ModalScreen):
         margin-top: 1;
         overflow-y: auto;
     }
-
-    #driver-footer {
-        margin-top: 1;
-        text-align: center;
-    }
     """
 
     def __init__(self, installed_drivers: list[str] | None = None):
@@ -78,15 +65,20 @@ class DriverSetupScreen(ModalScreen):
         os_type, os_version = get_os_info()
         has_drivers = len(self.installed_drivers) > 0
 
-        with Container(id="driver-dialog"):
+        if has_drivers:
+            title = "Select ODBC Driver"
+            shortcuts = [("Select", "Enter"), ("Cancel", "Esc")]
+        else:
+            title = "No ODBC Driver Found"
+            shortcuts = [("Select", "Enter"), ("Install", "I"), ("Cancel", "Esc")]
+
+        with Dialog(id="driver-dialog", title=title, shortcuts=shortcuts):
             if has_drivers:
-                yield Static("Select ODBC Driver", id="driver-title")
                 yield Static(
                     f"Found {len(self.installed_drivers)} installed driver(s):",
                     id="driver-message",
                 )
             else:
-                yield Static("No ODBC Driver Found", id="driver-title")
                 yield Static(
                     f"Detected OS: [bold]{os_type}[/] {os_version}\n"
                     "You need an ODBC driver to connect to SQL Server.",
@@ -114,12 +106,6 @@ class DriverSetupScreen(ModalScreen):
                         f"[bold]{install_info.description}:[/]\n\n{commands_text}",
                         id="install-commands",
                     )
-
-            footer_text = r"[bold]\[Enter][/] Select"
-            if not has_drivers:
-                footer_text += r"  [bold]\[I][/] Install"
-            footer_text += r"  [bold]\[Esc][/] Cancel"
-            yield Static(footer_text, id="driver-footer")
 
     def on_mount(self) -> None:
         self.query_one("#driver-list", OptionList).focus()

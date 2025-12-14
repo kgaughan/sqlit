@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Container
+from textual.containers import VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import OptionList, Static
 from textual.widgets.option_list import Option
+
+from ...widgets import Dialog
 
 
 class QueryHistoryScreen(ModalScreen):
@@ -15,6 +19,7 @@ class QueryHistoryScreen(ModalScreen):
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancel"),
+        Binding("q", "cancel", "Cancel"),
         Binding("enter", "select", "Select"),
         Binding("d", "delete", "Delete"),
     ]
@@ -27,22 +32,21 @@ class QueryHistoryScreen(ModalScreen):
 
     #history-dialog {
         width: 90;
+        max-width: 90%;
         height: 80%;
-        border: solid $primary;
-        background: $surface;
-        padding: 1 2;
+        max-height: 90%;
     }
 
-    #history-title {
-        text-align: center;
-        text-style: bold;
-        margin-bottom: 1;
+    #history-scroll {
+        height: 1fr;
+        background: $surface;
+        border: none;
     }
 
     #history-list {
-        height: 1fr;
+        height: auto;
         background: $surface;
-        border: solid $primary-darken-2;
+        border: none;
         padding: 0;
     }
 
@@ -50,19 +54,24 @@ class QueryHistoryScreen(ModalScreen):
         padding: 0 1;
     }
 
-    #history-preview {
+    #history-empty {
+        text-align: center;
+        color: $text-muted;
+        padding: 2;
+    }
+
+    #history-preview-container {
         height: 8;
+        min-height: 8;
+        max-height: 8;
         background: $surface-darken-1;
         border: solid $primary-darken-2;
         padding: 1;
         margin-top: 1;
-        overflow-y: auto;
     }
 
-    #history-footer {
-        margin-top: 1;
-        text-align: center;
-        color: $text-muted;
+    #history-preview {
+        height: auto;
     }
     """
 
@@ -72,43 +81,45 @@ class QueryHistoryScreen(ModalScreen):
         self.connection_name = connection_name
 
     def compose(self) -> ComposeResult:
-        from datetime import datetime
+        title = f"Query History - {self.connection_name}"
+        shortcuts = [("Select", "Enter"), ("Delete", "D"), ("Close", "Esc")]
 
-        with Container(id="history-dialog"):
-            yield Static(f"Query History - {self.connection_name}", id="history-title")
+        with Dialog(id="history-dialog", title=title, shortcuts=shortcuts):
+            with VerticalScroll(id="history-scroll"):
+                if self.history:
+                    options = []
+                    for entry in self.history:
+                        # Format timestamp nicely
+                        try:
+                            dt = datetime.fromisoformat(entry.timestamp)
+                            time_str = dt.strftime("%Y-%m-%d %H:%M")
+                        except (ValueError, AttributeError):
+                            time_str = "Unknown"
 
-            options = []
-            for entry in self.history:
-                # Format timestamp nicely
-                try:
-                    dt = datetime.fromisoformat(entry.timestamp)
-                    time_str = dt.strftime("%Y-%m-%d %H:%M")
-                except (ValueError, AttributeError):
-                    time_str = "Unknown"
+                        # Truncate query for display
+                        query_preview = entry.query.replace("\n", " ")[:60]
+                        if len(entry.query) > 60:
+                            query_preview += "..."
 
-                # Truncate query for display
-                query_preview = entry.query.replace("\n", " ")[:50]
-                if len(entry.query) > 50:
-                    query_preview += "..."
+                        options.append(
+                            Option(f"[dim]{time_str}[/]  {query_preview}", id=entry.timestamp)
+                        )
 
-                options.append(Option(f"[dim]{time_str}[/] {query_preview}", id=entry.timestamp))
+                    yield OptionList(*options, id="history-list")
+                else:
+                    yield Static("No query history for this connection", id="history-empty")
 
-            if options:
-                yield OptionList(*options, id="history-list")
-            else:
-                yield Static("No query history for this connection", id="history-list")
-
-            yield Static("", id="history-preview")
-            yield Static(r"[bold]\[Enter][/] Select  [bold]\[D][/] Delete  [bold]\[Esc][/] Cancel", id="history-footer")
+            with VerticalScroll(id="history-preview-container"):
+                yield Static("", id="history-preview")
 
     def on_mount(self) -> None:
-        try:
-            option_list = self.query_one("#history-list", OptionList)
-            option_list.focus()
-            if self.history:
+        if self.history:
+            try:
+                option_list = self.query_one("#history-list", OptionList)
+                option_list.focus()
                 self._update_preview(0)
-        except Exception:
-            pass
+            except Exception:
+                pass
 
     def on_option_list_option_highlighted(self, event) -> None:
         if event.option_list.id == "history-list":
