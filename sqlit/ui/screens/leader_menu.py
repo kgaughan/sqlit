@@ -23,6 +23,8 @@ class LeaderMenuScreen(ModalScreen):
         Binding("q", "cmd_quit", "Quit", show=False),
         # Connection (when connected)
         Binding("x", "cmd_disconnect", "Disconnect", show=False),
+        # Cancel (when query running)
+        Binding("c", "cmd_cancel", "Cancel", show=False),
     ]
 
     CSS = """
@@ -60,6 +62,7 @@ class LeaderMenuScreen(ModalScreen):
 
         # Actions category
         lines.append("[bold $text-muted]Actions[/]")
+        lines.append("  [bold $warning]c[/] Cancel Running Operation")
         lines.append("  [bold $warning]t[/] Change Theme")
         lines.append("  [bold $warning]h[/] Help")
         lines.append("  [bold $warning]q[/] Quit")
@@ -100,3 +103,6 @@ class LeaderMenuScreen(ModalScreen):
     def action_cmd_disconnect(self) -> None:
         if self.app.current_connection:
             self._run_and_dismiss("disconnect")
+
+    def action_cmd_cancel(self) -> None:
+        self._run_and_dismiss("cancel_operation")

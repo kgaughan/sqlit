@@ -108,7 +108,8 @@ sqlit connection delete "MyConnection"
 | `h` | Query history |
 | `d` | Clear query |
 | `n` | New query (clear all) |
-| `Ctrl+P` | Command palette |
+| `<space>` | Commands menu |
+| `<space>c` | Cancel running operation |
 | `Ctrl+Q` | Quit |
 | `?` | Help |
 
