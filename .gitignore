@@ -33,3 +33,4 @@ aur/*.tar.gz
 aur/src/
 aur/pkg/
 aur/*.pkg.tar.*
+sqlit-notifications/
