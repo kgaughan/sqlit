@@ -1,6 +1,6 @@
 # sqlit
 
-**The lazygit of SQL databases.** Connect to Postgres, MySQL, SQL Server, or SQLite from your terminal in seconds.
+**The lazygit of SQL databases.** Connect to Postgres, MySQL, SQL Server, SQLite, Turso, and more from your terminal in seconds.
 
 A lightweight TUI for people who just want to run some queries fast.
 
@@ -18,7 +18,7 @@ A lightweight TUI for people who just want to run some queries fast.
 
 - **Connection manager UI** - Save connections, switch between databases without CLI args
 - **Just run `sqlit`** - No CLI config needed, pick a connection and go
-- **Multi-database out of the box** - SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, Oracle, DuckDB, CockroachDB - no adapters to install
+- **Multi-database out of the box** - SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, Oracle, DuckDB, CockroachDB, Turso - no adapters to install
 - **SSH tunnels built-in** - Connect to remote databases securely with password or key auth
 - **Vim-style editing** - Modal editing for terminal purists
 - **Query history** - Automatically saves queries per connection, searchable and sortable
@@ -40,7 +40,7 @@ The problem got severely worse when I switched to Linux and had to rely on VS CO
 
 I tried to use some existing TUI's for SQL, but they were not intuitive for me and I missed the immediate ease of use that other TUI's such as Lazygit provides.
 
-sqlit is a lightweight database TUI that is easy to use and beautiful to look at, just connect and query. It's for you that just wants to run queries toward your database without launching applications that eats your ram and takes time to load up. Sqlit supports SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, Oracle, DuckDB, and CockroachDB, and is designed to make it easy and enjoyable to access your data, not painful.
+sqlit is a lightweight database TUI that is easy to use and beautiful to look at, just connect and query. It's for you that just wants to run queries toward your database without launching applications that eats your ram and takes time to load up. Sqlit supports SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, Oracle, DuckDB, CockroachDB, and Turso, and is designed to make it easy and enjoyable to access your data, not painful.
 
 
 ## Installation
@@ -49,19 +49,7 @@ sqlit is a lightweight database TUI that is easy to use and beautiful to look at
 pip install sqlit-tui
 ```
 
-For SQL Server, sqlit will detect if you're missing ODBC drivers and help you install them.
-
-For PostgreSQL, CockroachDB, and MySQL, install the optional drivers:
-
-```bash
-# PostgreSQL / CockroachDB
-pip install psycopg2-binary
-
-# MySQL
-pip install mysql-connector-python
-```
-
-SQLite works out of the box with no additional dependencies.
+If you are missing Python packages for your database provider, sqlit will help you install them when you attempt to connect.
 
 ## Usage
 
@@ -87,6 +75,7 @@ sqlit connection create --name "MyPostgres" --db-type postgresql --server "local
 sqlit connection create --name "MyMySQL" --db-type mysql --server "localhost" --username "user" --password "pass"
 sqlit connection create --name "MyCockroach" --db-type cockroachdb --server "localhost" --port "26257" --database "defaultdb" --username "root"
 sqlit connection create --name "MyLocalDB" --db-type sqlite --file-path "/path/to/database.db"
+sqlit connection create --name "MyTurso" --db-type turso --server "libsql://your-db.turso.io" --password "your-auth-token"
 
 # Connect via SSH tunnel
 sqlit connection create --name "RemoteDB" --db-type postgresql --server "db-host" --username "dbuser" --password "dbpass" \
@@ -120,6 +109,27 @@ You can also receive autocompletion on columns by typing the table name and hitt
 ## Configuration
 
 Connections and settings are stored in `~/.sqlit/`.
+
+## FAQ
+
+### How are sensitive credentials stored?
+
+Credentials are stored in plain text in a protected directory (`~/.sqlit/`) with restricted file permissions (700/600).
+
+### How does sqlit compare to Harlequin, Lazysql, etc.?
+
+sqlit is inspired by [lazygit](https://github.com/jesseduffield/lazygit) - you can just jump in and there's no need for external documentation. The keybindings are shown at the bottom of the screen and the UI is designed to be intuitive without memorizing shortcuts.
+
+Key differences:
+- **No need for external documentation** - Sqlit embrace the "lazy" approach in that a user should be able to jump in and use it right away intuitively. There should be no setup instructions. If python packages are required for certain adapters, sqlit will help you install them as you need them. 
+- **No CLI config required** - Just run `sqlit` and pick a connection from the UI
+- **Lightweight** - While Lazysql or Marlequin offer more features, I experienced that for the vast majority of cases, all I needed is an simple and fast way to connect and run queries. Sqlit is centered about doing a limited amount of things really well.
+
+## Inspiration
+
+sqlit is built with [Textual](https://github.com/Textualize/textual) and inspired by:
+- [lazygit](https://github.com/jesseduffield/lazygit) - Simple  TUI for git
+- [lazysql](https://github.com/jorgerojas26/lazysql) - Terminal-based SQL client with connection manager
 
 ## Contributing
 

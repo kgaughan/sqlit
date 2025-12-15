@@ -360,7 +360,12 @@ def cmd_query(
             # For unlimited streaming output (CSV/JSON only), use direct cursor access
             from .services.query import is_select_query
 
-            if max_rows is None and args.format in ("csv", "json") and is_select_query(query):
+            # Check if connection supports cursors (some adapters like Turso don't)
+            has_cursor = hasattr(session.connection, "cursor") and callable(
+                getattr(session.connection, "cursor", None)
+            )
+
+            if max_rows is None and args.format in ("csv", "json") and is_select_query(query) and has_cursor:
                 # Stream directly from cursor for unlimited CSV/JSON
                 cursor = session.connection.cursor()
                 cursor.execute(query)

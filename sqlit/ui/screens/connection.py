@@ -26,6 +26,7 @@ from ...config import (
 )
 from ...db import create_ssh_tunnel, get_adapter, get_connection_schema
 from ...fields import FieldDefinition, FieldGroup, FieldType, schema_to_field_definitions
+from ...validation import ValidationState, validate_connection_form
 from ...widgets import Dialog
 
 
@@ -226,6 +227,7 @@ class ConnectionScreen(ModalScreen):
         self._last_test_error: str = ""
         self._last_test_ok: bool | None = None
         self._focused_container_id: str | None = None
+        self.validation_state: ValidationState = ValidationState()
 
     def _get_initial_db_type(self) -> DatabaseType:
         """Get the initial database type from config."""
@@ -957,6 +959,49 @@ class ConnectionScreen(ModalScreen):
         except Exception:
             pass
 
+    def _apply_validation_to_ui(self) -> None:
+        """Apply validation_state to UI elements."""
+        self._clear_tab_errors()
+        self.validation_state.tab_errors.clear()
+
+        # Clear all field errors first
+        self._clear_field_error("name")
+        for field_name in self._field_definitions:
+            self._clear_field_error(field_name)
+        for ssh_field in ["ssh_host", "ssh_username", "ssh_key_path"]:
+            self._clear_field_error(ssh_field)
+
+        # Apply errors from validation state
+        for field_name, message in self.validation_state.errors.items():
+            self._set_field_error(field_name, message)
+
+            # Determine which tab to mark
+            if field_name == "name":
+                self._set_tab_error("tab-general")
+                self.validation_state.add_tab_error("tab-general")
+            elif field_name.startswith("ssh_"):
+                self._set_tab_error("tab-ssh")
+                self.validation_state.add_tab_error("tab-ssh")
+            elif field_name in self._field_definitions:
+                field_def = self._field_definitions[field_name]
+                if field_def.advanced:
+                    self._set_tab_error("tab-advanced")
+                    self.validation_state.add_tab_error("tab-advanced")
+                else:
+                    self._set_tab_error("tab-general")
+                    self.validation_state.add_tab_error("tab-general")
+            else:
+                self._set_tab_error("tab-general")
+                self.validation_state.add_tab_error("tab-general")
+
+    def _get_existing_names(self) -> set[str]:
+        """Get set of existing connection names."""
+        try:
+            connections = getattr(self.app, "connections", []) or []
+            return {getattr(c, "name", None) for c in connections} - {None}
+        except Exception:
+            return set()
+
     def _validate_name_unique(self) -> None:
         self._clear_field_error("name")
         name = self.query_one("#conn-name", Input).value.strip()
@@ -1050,8 +1095,6 @@ class ConnectionScreen(ModalScreen):
 
     def _get_config(self) -> ConnectionConfig | None:
         """Build a ConnectionConfig from the current form values."""
-        self._clear_tab_errors()
-        self._clear_field_error("name")
         name_input = self.query_one("#conn-name", Input)
         name = name_input.value.strip()
 
@@ -1064,6 +1107,45 @@ class ConnectionScreen(ModalScreen):
 
         # Collect all field values
         values = self._get_current_form_values()
+
+        # Add SSH fields to values (for server-based databases)
+        if db_type not in (DatabaseType.SQLITE, DatabaseType.DUCKDB):
+            try:
+                ssh_enabled_select = self.query_one("#field-ssh_enabled", Select)
+                values["ssh_enabled"] = str(ssh_enabled_select.value)
+            except Exception:
+                values["ssh_enabled"] = "disabled"
+
+            try:
+                values["ssh_host"] = self.query_one("#field-ssh_host", Input).value
+            except Exception:
+                values["ssh_host"] = ""
+
+            try:
+                values["ssh_port"] = self.query_one("#field-ssh_port", Input).value or "22"
+            except Exception:
+                values["ssh_port"] = "22"
+
+            try:
+                values["ssh_username"] = self.query_one("#field-ssh_username", Input).value
+            except Exception:
+                values["ssh_username"] = ""
+
+            try:
+                ssh_auth_select = self.query_one("#field-ssh_auth_type", Select)
+                values["ssh_auth_type"] = str(ssh_auth_select.value)
+            except Exception:
+                values["ssh_auth_type"] = "key"
+
+            try:
+                values["ssh_key_path"] = self.query_one("#field-ssh_key_path", Input).value
+            except Exception:
+                values["ssh_key_path"] = ""
+
+            try:
+                values["ssh_password"] = self.query_one("#field-ssh_password", Input).value
+            except Exception:
+                values["ssh_password"] = ""
 
         # Name suggestion
         if not name:
@@ -1078,50 +1160,34 @@ class ConnectionScreen(ModalScreen):
             name_input.value = suggestion
             name = suggestion
 
-        self._validate_name_unique()
-        try:
-            if "hidden" not in self.query_one("#error-name", Static).classes:
-                self._set_tab_error("tab-general")
-                name_input.focus()
-                return None
-        except Exception:
-            pass
+        # Run validation
+        editing_name = self.config.name if self.editing and self.config else None
+        self.validation_state = validate_connection_form(
+            name=name,
+            db_type=db_type.value,
+            values=values,
+            field_definitions=self._field_definitions,
+            existing_names=self._get_existing_names(),
+            editing_name=editing_name,
+        )
 
-        # Validate required fields
-        for field_name, field_def in self._field_definitions.items():
-            self._clear_field_error(field_name)
-            if field_def.required:
-                # Check if field is visible
-                is_visible = True
-                if field_def.visible_when:
-                    is_visible = field_def.visible_when(values)
-                if field_def.advanced and not self._show_advanced:
-                    is_visible = False
+        # Apply validation to UI
+        self._apply_validation_to_ui()
 
-                if is_visible and not values.get(field_name):
-                    self._set_field_error(field_name, "Required.")
-                    # Mark the appropriate tab
-                    if field_def.advanced:
-                        self._set_tab_error("tab-advanced")
-                    else:
-                        self._set_tab_error("tab-general")
-                    return None
+        if not self.validation_state.is_valid():
+            # Focus the first field with an error
+            for field_name in self.validation_state.errors:
+                if field_name == "name":
+                    name_input.focus()
+                    break
+                try:
+                    self.query_one(f"#field-{field_name}").focus()
+                    break
+                except Exception:
+                    pass
+            return None
 
-        # File path validation
-        if db_type in (DatabaseType.SQLITE, DatabaseType.DUCKDB):
-            from pathlib import Path
-
-            fp = values.get("file_path", "").strip()
-            if not fp:
-                self._set_field_error("file_path", "Required.")
-                self._set_tab_error("tab-general")
-                return None
-            if not Path(fp).exists():
-                self._set_field_error("file_path", "File not found.")
-                self._set_tab_error("tab-general")
-                return None
-
-        # Build config based on database type
+        # Build config
         config_kwargs = {
             "name": name,
             "db_type": db_type.value,
@@ -1129,7 +1195,8 @@ class ConnectionScreen(ModalScreen):
 
         # Add all field values to config
         for field_name, value in values.items():
-            config_kwargs[field_name] = value
+            if not field_name.startswith("ssh_"):
+                config_kwargs[field_name] = value
 
         # Handle SQL Server specific fields
         if db_type == DatabaseType.MSSQL:
@@ -1138,57 +1205,13 @@ class ConnectionScreen(ModalScreen):
 
         # Add SSH fields (only for server-based databases)
         if db_type not in (DatabaseType.SQLITE, DatabaseType.DUCKDB):
-            try:
-                ssh_enabled_select = self.query_one("#field-ssh_enabled", Select)
-                config_kwargs["ssh_enabled"] = str(ssh_enabled_select.value) == "enabled"
-            except Exception:
-                config_kwargs["ssh_enabled"] = False
-
-            try:
-                config_kwargs["ssh_host"] = self.query_one("#field-ssh_host", Input).value
-            except Exception:
-                config_kwargs["ssh_host"] = ""
-
-            try:
-                config_kwargs["ssh_port"] = self.query_one("#field-ssh_port", Input).value or "22"
-            except Exception:
-                config_kwargs["ssh_port"] = "22"
-
-            try:
-                config_kwargs["ssh_username"] = self.query_one("#field-ssh_username", Input).value
-            except Exception:
-                config_kwargs["ssh_username"] = ""
-
-            try:
-                ssh_auth_select = self.query_one("#field-ssh_auth_type", Select)
-                config_kwargs["ssh_auth_type"] = str(ssh_auth_select.value)
-            except Exception:
-                config_kwargs["ssh_auth_type"] = "key"
-
-            try:
-                config_kwargs["ssh_key_path"] = self.query_one("#field-ssh_key_path", Input).value
-            except Exception:
-                config_kwargs["ssh_key_path"] = ""
-
-            try:
-                config_kwargs["ssh_password"] = self.query_one("#field-ssh_password", Input).value
-            except Exception:
-                config_kwargs["ssh_password"] = ""
-
-            # Validate SSH fields if enabled
-            if config_kwargs["ssh_enabled"]:
-                if not config_kwargs["ssh_host"]:
-                    self._set_field_error("ssh_host", "Required when SSH is enabled.")
-                    self._set_tab_error("tab-ssh")
-                    return None
-                if not config_kwargs["ssh_username"]:
-                    self._set_field_error("ssh_username", "Required when SSH is enabled.")
-                    self._set_tab_error("tab-ssh")
-                    return None
-                if config_kwargs["ssh_auth_type"] == "key" and not config_kwargs["ssh_key_path"]:
-                    self._set_field_error("ssh_key_path", "Required for key authentication.")
-                    self._set_tab_error("tab-ssh")
-                    return None
+            config_kwargs["ssh_enabled"] = values.get("ssh_enabled") == "enabled"
+            config_kwargs["ssh_host"] = values.get("ssh_host", "")
+            config_kwargs["ssh_port"] = values.get("ssh_port", "22")
+            config_kwargs["ssh_username"] = values.get("ssh_username", "")
+            config_kwargs["ssh_auth_type"] = values.get("ssh_auth_type", "key")
+            config_kwargs["ssh_key_path"] = values.get("ssh_key_path", "")
+            config_kwargs["ssh_password"] = values.get("ssh_password", "")
 
         return ConnectionConfig(**config_kwargs)
 
@@ -1201,6 +1224,7 @@ class ConnectionScreen(ModalScreen):
             "mariadb": "pip install mariadb",
             "duckdb": "pip install duckdb",
             "cockroachdb": "pip install psycopg2-binary",
+            "turso": "pip install libsql-client",
         }
         return hints.get(db_type)
 

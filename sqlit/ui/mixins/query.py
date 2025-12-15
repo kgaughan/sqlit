@@ -36,6 +36,7 @@ class QueryMixin:
     _last_result_row_count: int
     _query_worker: Worker | None
     _query_executing: bool
+    _query_start_time: float
     _spinner_index: int
     _spinner_timer: Timer | None
     _cancellable_query: "CancellableQuery | None"
@@ -57,8 +58,7 @@ class QueryMixin:
             self.notify("Connect to a server to execute queries", severity="warning")
             return
 
-        query_input = self.query_one("#query-input", TextArea)
-        query = query_input.text.strip()
+        query = self.query_input.text.strip()
 
         if not query:
             self.notify("No query to execute", severity="warning")
@@ -68,10 +68,9 @@ class QueryMixin:
         if hasattr(self, "_query_worker") and self._query_worker is not None:
             self._query_worker.cancel()
 
-        results_table = self.query_one("#results-table", DataTable)
-        results_table.clear(columns=True)
-        results_table.add_column("Status")
-        results_table.add_row("Executing query...")
+        self.results_table.clear(columns=True)
+        self.results_table.add_column("Status")
+        self.results_table.add_row("Executing query...")
 
         # Start spinner animation
         self._start_query_spinner()
@@ -85,7 +84,10 @@ class QueryMixin:
 
     def _start_query_spinner(self) -> None:
         """Start the query execution spinner animation."""
+        import time
+
         self._query_executing = True
+        self._query_start_time = time.perf_counter()
         self._spinner_index = 0
         self._update_status_bar()
         # Start timer to animate spinner
@@ -111,6 +113,7 @@ class QueryMixin:
     async def _run_query_async(self, query: str, keep_insert_mode: bool) -> None:
         """Run query asynchronously using a cancellable dedicated connection."""
         import asyncio
+        import time
 
         from ...services import CancellableQuery, QueryResult, QueryService
 
@@ -137,10 +140,12 @@ class QueryMixin:
             # Execute on dedicated connection (cancellable via connection close)
             max_fetch_rows = 10000
 
+            start_time = time.perf_counter()
             result = await asyncio.to_thread(
                 cancellable.execute,
                 max_fetch_rows,
             )
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
 
             # Save to history after successful execution
             service._save_to_history(config.name, query)
@@ -148,10 +153,10 @@ class QueryMixin:
             # Update UI (we're back on main thread after await)
             if isinstance(result, QueryResult):
                 self._display_query_results(
-                    result.columns, result.rows, result.row_count, result.truncated
+                    result.columns, result.rows, result.row_count, result.truncated, elapsed_ms
                 )
             else:
-                self._display_non_query_result(result.rows_affected)
+                self._display_non_query_result(result.rows_affected, elapsed_ms)
 
             if keep_insert_mode:
                 self._restore_insert_mode()
@@ -172,38 +177,38 @@ class QueryMixin:
             self._stop_query_spinner()
 
     def _display_query_results(
-        self, columns: list[str], rows: list[tuple], row_count: int, truncated: bool
+        self, columns: list[str], rows: list[tuple], row_count: int, truncated: bool, elapsed_ms: float
     ) -> None:
         """Display query results in the results table (called on main thread)."""
         self._last_result_columns = columns
         self._last_result_rows = rows
         self._last_result_row_count = row_count
 
-        results_table = self.query_one("#results-table", DataTable)
-        results_table.clear(columns=True)
-        results_table.add_columns(*columns)
+        self.results_table.clear(columns=True)
+        self.results_table.add_columns(*columns)
 
         # Only display first 1000 rows in the table
         for row in rows[:1000]:
             str_row = tuple(str(v) if v is not None else "NULL" for v in row)
-            results_table.add_row(*str_row)
+            self.results_table.add_row(*str_row)
 
+        time_str = f"{elapsed_ms:.0f}ms" if elapsed_ms >= 1 else f"{elapsed_ms:.2f}ms"
         if truncated:
-            self.notify(f"Query returned {row_count}+ rows (truncated)", severity="warning")
+            self.notify(f"Query returned {row_count}+ rows in {time_str} (truncated)", severity="warning")
         else:
-            self.notify(f"Query returned {row_count} rows")
+            self.notify(f"Query returned {row_count} rows in {time_str}")
 
-    def _display_non_query_result(self, affected: int) -> None:
+    def _display_non_query_result(self, affected: int, elapsed_ms: float) -> None:
         """Display non-query result (called on main thread)."""
         self._last_result_columns = ["Result"]
         self._last_result_rows = [(f"{affected} row(s) affected",)]
         self._last_result_row_count = 1
 
-        results_table = self.query_one("#results-table", DataTable)
-        results_table.clear(columns=True)
-        results_table.add_column("Result")
-        results_table.add_row(f"{affected} row(s) affected")
-        self.notify(f"Query executed: {affected} row(s) affected")
+        self.results_table.clear(columns=True)
+        self.results_table.add_column("Result")
+        self.results_table.add_row(f"{affected} row(s) affected")
+        time_str = f"{elapsed_ms:.0f}ms" if elapsed_ms >= 1 else f"{elapsed_ms:.2f}ms"
+        self.notify(f"Query executed: {affected} row(s) affected in {time_str}")
 
     def _display_query_error(self, error_message: str) -> None:
         """Display query error (called on main thread)."""
@@ -211,20 +216,18 @@ class QueryMixin:
         self._last_result_rows = [(error_message,)]
         self._last_result_row_count = 1
 
-        results_table = self.query_one("#results-table", DataTable)
-        results_table.clear(columns=True)
-        results_table.add_column("Error")
-        results_table.add_row(error_message)
+        self.results_table.clear(columns=True)
+        self.results_table.add_column("Error")
+        self.results_table.add_row(error_message)
         self.notify(f"Query error: {error_message}", severity="error")
 
     def _restore_insert_mode(self) -> None:
         """Restore INSERT mode after query execution (called on main thread)."""
         from ...widgets import VimMode
 
-        query_input = self.query_one("#query-input", TextArea)
         self.vim_mode = VimMode.INSERT
-        query_input.read_only = False
-        query_input.focus()
+        self.query_input.read_only = False
+        self.query_input.focus()
         self._update_footer_bindings()
         self._update_status_bar()
 
@@ -246,10 +249,9 @@ class QueryMixin:
         self._stop_query_spinner()
 
         # Update results table to show cancelled state
-        results_table = self.query_one("#results-table", DataTable)
-        results_table.clear(columns=True)
-        results_table.add_column("Status")
-        results_table.add_row("Query cancelled")
+        self.results_table.clear(columns=True)
+        self.results_table.add_column("Status")
+        self.results_table.add_row("Query cancelled")
 
         self.notify("Query cancelled", severity="warning")
 
@@ -269,10 +271,9 @@ class QueryMixin:
             self._stop_query_spinner()
 
             # Update results table to show cancelled state
-            results_table = self.query_one("#results-table", DataTable)
-            results_table.clear(columns=True)
-            results_table.add_column("Status")
-            results_table.add_row("Query cancelled")
+            self.results_table.clear(columns=True)
+            self.results_table.add_column("Status")
+            self.results_table.add_row("Query cancelled")
             cancelled = True
 
         # Cancel schema indexing if running
@@ -290,15 +291,12 @@ class QueryMixin:
 
     def action_clear_query(self) -> None:
         """Clear the query input."""
-        query_input = self.query_one("#query-input", TextArea)
-        query_input.text = ""
+        self.query_input.text = ""
 
     def action_new_query(self) -> None:
         """Start a new query (clear input and results)."""
-        query_input = self.query_one("#query-input", TextArea)
-        query_input.text = ""
-        results_table = self.query_one("#results-table", DataTable)
-        results_table.clear(columns=True)
+        self.query_input.text = ""
+        self.results_table.clear(columns=True)
 
     def action_show_history(self) -> None:
         """Show query history for the current connection."""
@@ -322,8 +320,7 @@ class QueryMixin:
 
         action, data = result
         if action == "select":
-            query_input = self.query_one("#query-input", TextArea)
-            query_input.text = data
+            self.query_input.text = data
         elif action == "delete":
             self._delete_history_entry(data)
             self.action_show_history()

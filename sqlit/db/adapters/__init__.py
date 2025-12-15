@@ -9,6 +9,7 @@ from .mysql import MySQLAdapter
 from .oracle import OracleAdapter
 from .postgresql import PostgreSQLAdapter
 from .sqlite import SQLiteAdapter
+from .turso import TursoAdapter
 
 __all__ = [
     # Base
@@ -24,6 +25,7 @@ __all__ = [
     "PostgreSQLAdapter",
     "SQLiteAdapter",
     "SQLServerAdapter",
+    "TursoAdapter",
     # Factory
     "get_adapter",
 ]
@@ -40,6 +42,7 @@ def get_adapter(db_type: str) -> DatabaseAdapter:
         "mariadb": MariaDBAdapter(),
         "duckdb": DuckDBAdapter(),
         "cockroachdb": CockroachDBAdapter(),
+        "turso": TursoAdapter(),
     }
     adapter = adapters.get(db_type)
     if not adapter:

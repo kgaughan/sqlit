@@ -34,19 +34,19 @@ class TreeMixin:
             "oracle": "Oracle",
             "duckdb": "DuckDB",
             "cockroachdb": "CRDB",
+            "turso": "Turso",
         }
         return badge_map.get(db_type, db_type.upper() if db_type else "DB")
 
     def refresh_tree(self) -> None:
         """Refresh the object explorer tree."""
-        tree = self.query_one("#object-tree", Tree)
-        tree.clear()
-        tree.root.expand()
+        self.object_tree.clear()
+        self.object_tree.root.expand()
 
         for conn in self.connections:
             display_info = conn.get_display_info()
             db_type_label = self._db_type_badge(conn.db_type)
-            node = tree.root.add(
+            node = self.object_tree.root.add(
                 f"[dim]{conn.name}[/dim] [{db_type_label}] ({display_info})"
             )
             node.data = ("connection", conn)
@@ -60,7 +60,6 @@ class TreeMixin:
         if not self.current_connection or not self.current_config or not self.current_adapter:
             return
 
-        tree = self.query_one("#object-tree", Tree)
         adapter = self.current_adapter
 
         def get_conn_label(config, connected=False):
@@ -73,7 +72,7 @@ class TreeMixin:
             return f"{name} [{db_type_label}] ({display_info})"
 
         active_node = None
-        for child in tree.root.children:
+        for child in self.object_tree.root.children:
             if child.data and child.data[0] == "connection":
                 if child.data[1].name == self.current_config.name:
                     child.set_label(get_conn_label(self.current_config, connected=True))
@@ -81,7 +80,7 @@ class TreeMixin:
                     break
 
         if not active_node:
-            active_node = tree.root.add(
+            active_node = self.object_tree.root.add(
                 get_conn_label(self.current_config, connected=True)
             )
             active_node.data = ("connection", self.current_config)
@@ -165,11 +164,6 @@ class TreeMixin:
         """Save which nodes are expanded."""
         from ...config import load_settings, save_settings
 
-        try:
-            tree = self.query_one("#object-tree", Tree)
-        except Exception:
-            return
-
         expanded = []
 
         def collect_expanded(node):
@@ -180,7 +174,7 @@ class TreeMixin:
             for child in node.children:
                 collect_expanded(child)
 
-        collect_expanded(tree.root)
+        collect_expanded(self.object_tree.root)
 
         self._expanded_paths = set(expanded)
         settings = load_settings()
@@ -380,14 +374,12 @@ class TreeMixin:
 
     def action_collapse_tree(self) -> None:
         """Collapse all nodes in the object explorer."""
-        tree = self.query_one("#object-tree", Tree)
-
         def collapse_all(node):
             for child in node.children:
                 collapse_all(child)
                 child.collapse()
 
-        collapse_all(tree.root)
+        collapse_all(self.object_tree.root)
         self._expanded_paths.clear()
         self._save_expanded_state()
 
@@ -396,8 +388,7 @@ class TreeMixin:
         if not self.current_adapter:
             return
 
-        tree = self.query_one("#object-tree", Tree)
-        node = tree.cursor_node
+        node = self.object_tree.cursor_node
 
         if not node or not node.data:
             return
@@ -406,11 +397,8 @@ class TreeMixin:
         if data[0] not in ("table", "view") or len(data) < 4:
             return
 
-        from textual.widgets import TextArea
-
         db_name = data[1]
         schema_name = data[2]
         obj_name = data[3]
-        query_input = self.query_one("#query-input", TextArea)
-        query_input.text = self.current_adapter.build_select_query(obj_name, 100, db_name, schema_name)
+        self.query_input.text = self.current_adapter.build_select_query(obj_name, 100, db_name, schema_name)
         self.action_execute_query()

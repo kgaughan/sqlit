@@ -115,8 +115,7 @@ class ConnectionMixin:
         if self.current_connection:
             self._disconnect_silent()
 
-            status = self.query_one("#status-bar", Static)
-            status.update("Disconnected")
+            self.status_bar.update("Disconnected")
 
             self.refresh_tree()
             self.notify("Disconnected")
@@ -130,12 +129,9 @@ class ConnectionMixin:
 
     def action_edit_connection(self) -> None:
         """Edit the selected connection."""
-        from textual.widgets import Tree
-
         from ..screens import ConnectionScreen
 
-        tree = self.query_one("#object-tree", Tree)
-        node = tree.cursor_node
+        node = self.object_tree.cursor_node
 
         if not node or not node.data:
             return
@@ -183,13 +179,9 @@ class ConnectionMixin:
 
     def action_delete_connection(self) -> None:
         """Delete the selected connection."""
-        from textual.widgets import Tree
-
         from ..screens import ConfirmScreen
-        from ...config import ConnectionConfig
 
-        tree = self.query_one("#object-tree", Tree)
-        node = tree.cursor_node
+        node = self.object_tree.cursor_node
 
         if not node or not node.data:
             return
@@ -220,10 +212,7 @@ class ConnectionMixin:
 
     def action_connect_selected(self) -> None:
         """Connect to the selected connection."""
-        from textual.widgets import Tree
-
-        tree = self.query_one("#object-tree", Tree)
-        node = tree.cursor_node
+        node = self.object_tree.cursor_node
 
         if not node or not node.data:
             return
@@ -232,6 +221,35 @@ class ConnectionMixin:
         if data[0] == "connection":
             config = data[1]
             if self.current_config and self.current_config.name == config.name:
+                return
+            if self.current_connection:
+                self._disconnect_silent()
+            self.connect_to_server(config)
+
+    def action_show_connection_picker(self) -> None:
+        """Show connection picker dialog."""
+        from ..screens import ConnectionPickerScreen
+
+        self.push_screen(
+            ConnectionPickerScreen(self.connections),
+            self._handle_connection_picker_result,
+        )
+
+    def _handle_connection_picker_result(self, result: str | None) -> None:
+        """Handle connection picker selection."""
+        if result is None:
+            return
+
+        config = next((c for c in self.connections if c.name == result), None)
+        if config:
+            # Select the connection node in the tree
+            for node in self.object_tree.root.children:
+                if node.data and node.data[0] == "connection" and node.data[1].name == result:
+                    self.object_tree.select_node(node)
+                    break
+
+            if self.current_config and self.current_config.name == config.name:
+                self.notify(f"Already connected to {config.name}")
                 return
             if self.current_connection:
                 self._disconnect_silent()

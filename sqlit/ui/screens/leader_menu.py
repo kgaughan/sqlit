@@ -21,10 +21,11 @@ class LeaderMenuScreen(ModalScreen):
         Binding("h", "cmd_help", "Help", show=False),
         Binding("t", "cmd_theme", "Theme", show=False),
         Binding("q", "cmd_quit", "Quit", show=False),
-        # Connection (when connected)
+        # Connection
+        Binding("c", "cmd_connect", "Connect", show=False),
         Binding("x", "cmd_disconnect", "Disconnect", show=False),
-        # Cancel (when query running)
-        Binding("c", "cmd_cancel", "Cancel", show=False),
+        # Cancel
+        Binding("z", "cmd_cancel", "Cancel", show=False),
     ]
 
     CSS = """
@@ -51,6 +52,7 @@ class LeaderMenuScreen(ModalScreen):
     def compose(self) -> ComposeResult:
         app = self.app
         connected = app.current_connection is not None
+        query_running = getattr(app, "_query_executing", False)
 
         lines = []
 
@@ -60,17 +62,21 @@ class LeaderMenuScreen(ModalScreen):
         lines.append("  [bold $warning]f[/] Toggle Maximize Current Window")
         lines.append("")
 
+        # Connection category
+        lines.append("[bold $text-muted]Connection[/]")
+        lines.append("  [bold $warning]c[/] Connect")
+        if connected:
+            lines.append("  [bold $warning]x[/] Disconnect")
+
+        lines.append("")
+
         # Actions category
         lines.append("[bold $text-muted]Actions[/]")
-        lines.append("  [bold $warning]c[/] Cancel Running Operation")
+        if query_running:
+            lines.append("  [bold $warning]z[/] Cancel Query")
         lines.append("  [bold $warning]t[/] Change Theme")
         lines.append("  [bold $warning]h[/] Help")
         lines.append("  [bold $warning]q[/] Quit")
-
-        if connected:
-            lines.append("")
-            lines.append("[bold $text-muted]Connection[/]")
-            lines.append("  [bold $warning]x[/] Disconnect")
 
         lines.append("")
         lines.append("[$primary]Close: <esc>[/]")
@@ -100,9 +106,13 @@ class LeaderMenuScreen(ModalScreen):
     def action_cmd_quit(self) -> None:
         self._run_and_dismiss("quit")
 
+    def action_cmd_connect(self) -> None:
+        self._run_and_dismiss("show_connection_picker")
+
     def action_cmd_disconnect(self) -> None:
         if self.app.current_connection:
             self._run_and_dismiss("disconnect")
 
     def action_cmd_cancel(self) -> None:
-        self._run_and_dismiss("cancel_operation")
+        if getattr(self.app, "_query_executing", False):
+            self._run_and_dismiss("cancel_operation")

@@ -86,12 +86,11 @@ class UINavigationMixin:
         # Unhide explorer if hidden
         if self.screen.has_class("explorer-hidden"):
             self.screen.remove_class("explorer-hidden")
-        tree = self.query_one("#object-tree", Tree)
-        tree.focus()
+        self.object_tree.focus()
         # If no node selected or on root, move cursor to first child
-        if tree.cursor_node is None or tree.cursor_node == tree.root:
-            if tree.root.children:
-                tree.cursor_line = 0
+        if self.object_tree.cursor_node is None or self.object_tree.cursor_node == self.object_tree.root:
+            if self.object_tree.root.children:
+                self.object_tree.cursor_line = 0
 
     def action_focus_query(self) -> None:
         """Focus the Query pane (in NORMAL mode)."""
@@ -100,25 +99,23 @@ class UINavigationMixin:
         if self._fullscreen_mode != "none":
             self._set_fullscreen_mode("none")
         self.vim_mode = VimMode.NORMAL
-        query_input = self.query_one("#query-input", TextArea)
-        query_input.read_only = True
-        query_input.focus()
+        self.query_input.read_only = True
+        self.query_input.focus()
         self._update_status_bar()
 
     def action_focus_results(self) -> None:
         """Focus the Results pane."""
         if self._fullscreen_mode != "none":
             self._set_fullscreen_mode("none")
-        self.query_one("#results-table", DataTable).focus()
+        self.results_table.focus()
 
     def action_enter_insert_mode(self) -> None:
         """Enter INSERT mode for query editing."""
         from ...widgets import VimMode
 
-        query_input = self.query_one("#query-input", TextArea)
-        if query_input.has_focus and self.vim_mode == VimMode.NORMAL:
+        if self.query_input.has_focus and self.vim_mode == VimMode.NORMAL:
             self.vim_mode = VimMode.INSERT
-            query_input.read_only = False
+            self.query_input.read_only = False
             self._update_status_bar()
             self._update_footer_bindings()
 
@@ -128,8 +125,7 @@ class UINavigationMixin:
 
         if self.vim_mode == VimMode.INSERT:
             self.vim_mode = VimMode.NORMAL
-            query_input = self.query_one("#query-input", TextArea)
-            query_input.read_only = True
+            self.query_input.read_only = True
             self._hide_autocomplete()
             self._update_status_bar()
             self._update_footer_bindings()
@@ -139,7 +135,7 @@ class UINavigationMixin:
         from ...widgets import VimMode
         from .query import SPINNER_FRAMES
 
-        status = self.query_one("#status-bar", Static)
+        status = self.status_bar
         if getattr(self, "_connection_failed", False):
             conn_info = "[#ff6b6b]Connection failed[/]"
         elif self.current_config:
@@ -159,9 +155,20 @@ class UINavigationMixin:
 
         # Check if query is executing
         if getattr(self, "_query_executing", False):
+            import time
+
             spinner_idx = getattr(self, "_spinner_index", 0)
             spinner = SPINNER_FRAMES[spinner_idx % len(SPINNER_FRAMES)]
-            status_parts.append(f"[bold yellow]{spinner} Running...[/]")
+            start_time = getattr(self, "_query_start_time", None)
+            if start_time:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                if elapsed_ms >= 1000:
+                    elapsed_str = f"{elapsed_ms / 1000:.1f}s"
+                else:
+                    elapsed_str = f"{elapsed_ms:.0f}ms"
+                status_parts.append(f"[bold yellow]{spinner} Executing [{elapsed_str}][/] [dim]<space>z to cancel[/]")
+            else:
+                status_parts.append(f"[bold yellow]{spinner} Executing[/] [dim]<space>z to cancel[/]")
 
         status_str = "  ".join(status_parts)
         if status_str:
@@ -169,8 +176,7 @@ class UINavigationMixin:
 
         # Build left side content
         try:
-            query_input = self.query_one("#query-input", TextArea)
-            if query_input.has_focus:
+            if self.query_input.has_focus:
                 if self.vim_mode == VimMode.NORMAL:
                     mode_str = f"[bold orange1]-- {self.vim_mode.value} --[/]"
                 else:
@@ -257,35 +263,33 @@ class UINavigationMixin:
 
         error_text = f"[{timestamp}] {message}" if timestamp else message
 
-        results_table = self.query_one("#results-table", DataTable)
         # Wrap to table width (minus some padding), minimum 40 chars
-        wrap_width = max(40, results_table.size.width - 4)
+        wrap_width = max(40, self.results_table.size.width - 4)
         wrapped = textwrap.fill(error_text, width=wrap_width)
 
         self._last_result_columns = ["Error"]
         self._last_result_rows = [(wrapped,)]
         self._last_result_row_count = 1
 
-        results_table.clear(columns=True)
-        results_table.add_column("Error")
-        results_table.add_row(wrapped)
+        self.results_table.clear(columns=True)
+        self.results_table.add_column("Error")
+        self.results_table.add_row(wrapped)
         self._update_footer_bindings()
 
     def action_toggle_explorer(self) -> None:
         """Toggle the visibility of the explorer sidebar."""
-        try:
-            tree = self.query_one("#object-tree", Tree)
-            query_input = self.query_one("#query-input", TextArea)
-        except Exception:
+        if self._fullscreen_mode != "none":
+            self._set_fullscreen_mode("none")
+            self.object_tree.focus()
             return
 
         if self.screen.has_class("explorer-hidden"):
             self.screen.remove_class("explorer-hidden")
-            tree.focus()
+            self.object_tree.focus()
         else:
             # If explorer has focus, move focus to query before hiding
-            if tree.has_focus:
-                query_input.focus()
+            if self.object_tree.has_focus:
+                self.query_input.focus()
             self.screen.add_class("explorer-hidden")
 
     def action_change_theme(self) -> None:
@@ -300,18 +304,11 @@ class UINavigationMixin:
 
     def action_toggle_fullscreen(self) -> None:
         """Toggle fullscreen for the currently focused pane."""
-        try:
-            tree = self.query_one("#object-tree", Tree)
-            query_input = self.query_one("#query-input", TextArea)
-            results_table = self.query_one("#results-table", DataTable)
-        except Exception:
-            return
-
-        if tree.has_focus:
+        if self.object_tree.has_focus:
             target = "explorer"
-        elif query_input.has_focus:
+        elif self.query_input.has_focus:
             target = "query"
-        elif results_table.has_focus:
+        elif self.results_table.has_focus:
             target = "results"
         else:
             target = "none"
@@ -322,11 +319,11 @@ class UINavigationMixin:
             self._set_fullscreen_mode(target)
 
         if self._fullscreen_mode == "explorer":
-            tree.focus()
+            self.object_tree.focus()
         elif self._fullscreen_mode == "query":
-            query_input.focus()
+            self.query_input.focus()
         elif self._fullscreen_mode == "results":
-            results_table.focus()
+            self.results_table.focus()
 
         self._update_section_labels()
         self._update_footer_bindings()
@@ -341,18 +338,15 @@ class UINavigationMixin:
 
         try:
             footer = self.query_one(ContextFooter)
-            tree = self.query_one("#object-tree", Tree)
-            query_input = self.query_one("#query-input", TextArea)
-            results_table = self.query_one("#results-table", DataTable)
         except Exception:
             return
 
         left_bindings: list[KeyBinding] = []
 
-        if tree.has_focus:
-            node = tree.cursor_node
+        if self.object_tree.has_focus:
+            node = self.object_tree.cursor_node
             node_type = None
-            is_root = node == tree.root if node else False
+            is_root = node == self.object_tree.root if node else False
 
             if node and node.data:
                 node_type = node.data[0]
@@ -386,7 +380,7 @@ class UINavigationMixin:
                 left_bindings.append(KeyBinding("enter", "Expand", "toggle_node"))
                 left_bindings.append(KeyBinding("f", "Refresh", "refresh_tree"))
 
-        elif query_input.has_focus:
+        elif self.query_input.has_focus:
             if self.vim_mode == VimMode.NORMAL:
                 left_bindings.append(KeyBinding("i", "Insert Mode", "enter_insert_mode"))
                 left_bindings.append(KeyBinding("enter", "Execute", "execute_query"))
@@ -399,7 +393,7 @@ class UINavigationMixin:
                 left_bindings.append(KeyBinding("f5", "Execute", "execute_query_insert"))
                 left_bindings.append(KeyBinding("tab", "Autocomplete", "autocomplete_accept"))
 
-        elif results_table.has_focus:
+        elif self.results_table.has_focus:
             # Check if showing an error (column named "Error")
             is_error = self._last_result_columns == ["Error"]
             if is_error:
@@ -493,7 +487,12 @@ class UINavigationMixin:
 
     def _show_leader_menu(self) -> None:
         """Display the leader menu."""
+        from textual.screen import ModalScreen
+
         from ..screens import LeaderMenuScreen
+
+        if any(isinstance(screen, ModalScreen) for screen in self.screen_stack[1:]):
+            return
 
         self.push_screen(LeaderMenuScreen(), self._handle_leader_result)
 
@@ -536,18 +535,23 @@ class UINavigationMixin:
         if self.current_connection:
             self.action_disconnect()
 
+    def action_leader_connect(self) -> None:
+        """Leader combo: show connection picker."""
+        self.action_show_connection_picker()
+
+    def action_leader_cancel(self) -> None:
+        """Leader combo: cancel running operation."""
+        if getattr(self, "_query_executing", False):
+            self.action_cancel_operation()
+
     def on_descendant_focus(self, event) -> None:
         """Handle focus changes to update section labels and footer."""
         from ...widgets import VimMode
 
         self._update_section_labels()
-        try:
-            query_input = self.query_one("#query-input", TextArea)
-            if not query_input.has_focus and self.vim_mode == VimMode.INSERT:
-                self.vim_mode = VimMode.NORMAL
-                query_input.read_only = True
-        except Exception:
-            pass
+        if not self.query_input.has_focus and self.vim_mode == VimMode.INSERT:
+            self.vim_mode = VimMode.NORMAL
+            self.query_input.read_only = True
         self._update_footer_bindings()
         self._update_status_bar()
 

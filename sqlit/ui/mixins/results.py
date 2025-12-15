@@ -91,7 +91,7 @@ class ResultsMixin:
         """View the full value of the selected cell."""
         from ..screens import ValueViewScreen
 
-        table = self.query_one("#results-table", DataTable)
+        table = self.results_table
         if table.row_count <= 0:
             self.notify("No results", severity="warning")
             return
@@ -107,7 +107,7 @@ class ResultsMixin:
 
     def action_copy_cell(self) -> None:
         """Copy the selected cell to clipboard (or internal clipboard)."""
-        table = self.query_one("#results-table", DataTable)
+        table = self.results_table
         if table.row_count <= 0:
             self.notify("No results", severity="warning")
             return
@@ -120,7 +120,7 @@ class ResultsMixin:
 
     def action_copy_row(self) -> None:
         """Copy the selected row to clipboard (TSV)."""
-        table = self.query_one("#results-table", DataTable)
+        table = self.results_table
         if table.row_count <= 0:
             self.notify("No results", severity="warning")
             return
@@ -141,8 +141,4 @@ class ResultsMixin:
 
         text = self._format_tsv(self._last_result_columns, self._last_result_rows)
         self._copy_text(text)
-        try:
-            table = self.query_one("#results-table", DataTable)
-            self._flash_table_yank(table, "all")
-        except Exception:
-            pass
+        self._flash_table_yank(self.results_table, "all")

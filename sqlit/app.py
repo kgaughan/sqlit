@@ -182,7 +182,9 @@ class SSMSTUI(
         Binding("h", "leader_help", show=False),
         Binding("t", "leader_theme", show=False),
         Binding("q", "leader_quit", show=False),
+        Binding("c", "leader_connect", show=False),
         Binding("x", "leader_disconnect", show=False),
+        Binding("z", "leader_cancel", show=False),
         # Regular bindings
         Binding("n", "new_connection", "New", show=False),
         Binding("s", "select_table", "Select", show=False),
@@ -261,6 +263,43 @@ class SSMSTUI(
         self._table_metadata: dict = {}
         self._columns_loading: set[str] = set()
 
+    @property
+    def object_tree(self) -> Tree:
+        return self.query_one("#object-tree", Tree)
+
+    @property
+    def query_input(self) -> TextArea:
+        return self.query_one("#query-input", TextArea)
+
+    @property
+    def results_table(self) -> DataTable:
+        return self.query_one("#results-table", DataTable)
+
+    @property
+    def sidebar(self):
+        return self.query_one("#sidebar")
+
+    @property
+    def main_panel(self):
+        return self.query_one("#main-panel")
+
+    @property
+    def query_area(self):
+        return self.query_one("#query-area")
+
+    @property
+    def results_area(self):
+        return self.query_one("#results-area")
+
+    @property
+    def status_bar(self) -> Static:
+        return self.query_one("#status-bar", Static)
+
+    @property
+    def autocomplete_dropdown(self):
+        from .widgets import AutocompleteDropdown
+        return self.query_one("#autocomplete-dropdown", AutocompleteDropdown)
+
     def push_screen(self, screen, callback=None, wait_for_dismiss: bool = False):
         """Override push_screen to hide footer when showing modal dialogs."""
         from textual.screen import ModalScreen
@@ -311,21 +350,14 @@ class SSMSTUI(
             if action != "leader_key":
                 return False
 
-        try:
-            tree = self.query_one("#object-tree", Tree)
-            query_input = self.query_one("#query-input", TextArea)
-            results_table = self.query_one("#results-table", DataTable)
-        except Exception:
-            return True
-
-        tree_focused = tree.has_focus
-        query_focused = query_input.has_focus
-        results_focused = results_table.has_focus
+        tree_focused = self.object_tree.has_focus
+        query_focused = self.query_input.has_focus
+        results_focused = self.results_table.has_focus
         in_insert_mode = self.vim_mode == VimMode.INSERT
 
-        node = tree.cursor_node
+        node = self.object_tree.cursor_node
         node_type = None
-        is_root = node == tree.root if node else False
+        is_root = node == self.object_tree.root if node else False
         if node and node.data:
             node_type = node.data[0]
 
@@ -428,7 +460,7 @@ class SSMSTUI(
                         yield Static(
                             r"\[r] Results", classes="section-label", id="label-results"
                         )
-                        yield DataTable(id="results-table")
+                        yield DataTable(id="results-table", zebra_stripes=True)
 
             yield Static("Not connected", id="status-bar")
 
@@ -459,11 +491,10 @@ class SSMSTUI(
         self.refresh_tree()
         self._update_footer_bindings()
 
-        tree = self.query_one("#object-tree", Tree)
-        tree.focus()
+        self.object_tree.focus()
         # Move cursor to first node if available
-        if tree.root.children:
-            tree.cursor_line = 0
+        if self.object_tree.root.children:
+            self.object_tree.cursor_line = 0
         self._update_section_labels()
 
         # Check for ODBC drivers

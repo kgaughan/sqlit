@@ -39,6 +39,7 @@ class DatabaseType(Enum):
     MARIADB = "mariadb"
     DUCKDB = "duckdb"
     COCKROACHDB = "cockroachdb"
+    TURSO = "turso"
 
 
 DATABASE_TYPE_LABELS = {
@@ -50,6 +51,7 @@ DATABASE_TYPE_LABELS = {
     DatabaseType.MARIADB: "MariaDB",
     DatabaseType.DUCKDB: "DuckDB",
     DatabaseType.COCKROACHDB: "CockroachDB",
+    DatabaseType.TURSO: "Turso",
 }
 
 

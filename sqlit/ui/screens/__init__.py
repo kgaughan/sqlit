@@ -2,6 +2,7 @@
 
 from .confirm import ConfirmScreen
 from .connection import ConnectionScreen
+from .connection_picker import ConnectionPickerScreen
 from .driver_setup import DriverSetupScreen
 from .error import ErrorScreen
 from .help import HelpScreen
@@ -13,6 +14,7 @@ from .value_view import ValueViewScreen
 __all__ = [
     "ConfirmScreen",
     "ConnectionScreen",
+    "ConnectionPickerScreen",
     "DriverSetupScreen",
     "ErrorScreen",
     "HelpScreen",

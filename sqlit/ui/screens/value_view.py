@@ -50,8 +50,30 @@ class ValueViewScreen(ModalScreen):
 
     def __init__(self, value: str, title: str = "Value"):
         super().__init__()
-        self.value = value
+        self.value = self._format_value(value)
         self.title = title
+
+    def _format_value(self, value: str) -> str:
+        """Try to format value as JSON or Python literal if possible."""
+        import ast
+        import json
+
+        stripped = value.strip()
+        # Check if it looks like JSON/dict/list (starts with { or [)
+        if stripped and stripped[0] in "{[":
+            # Try JSON first
+            try:
+                parsed = json.loads(stripped)
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            # Try Python literal (handles single quotes, True/False/None)
+            try:
+                parsed = ast.literal_eval(stripped)
+                return json.dumps(parsed, indent=2, ensure_ascii=False)
+            except (ValueError, SyntaxError):
+                pass
+        return value
 
     def compose(self) -> ComposeResult:
         shortcuts = [("Copy", "y"), ("Close", "<enter>")]

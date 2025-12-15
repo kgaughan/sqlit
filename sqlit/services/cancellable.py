@@ -100,37 +100,22 @@ class CancellableQuery:
                     raise RuntimeError("Query was cancelled")
                 self._connection = self.adapter.connect(connect_config)
 
-            # Execute query
-            cursor = self._connection.cursor()
-            cursor.execute(self.sql)
-
-            # Check if it's a SELECT query
-            if is_select_query(self.sql) and cursor.description:
-                columns = [col[0] for col in cursor.description]
-
-                if max_rows:
-                    rows = cursor.fetchmany(max_rows + 1)
-                    truncated = len(rows) > max_rows
-                    if truncated:
-                        rows = rows[:max_rows]
-                else:
-                    rows = cursor.fetchall()
-                    truncated = False
-
-                row_list = [tuple(row) for row in rows]
+            # Execute query using adapter methods
+            if is_select_query(self.sql):
+                columns, rows, truncated = self.adapter.execute_query(
+                    self._connection, self.sql, max_rows
+                )
                 return QueryResult(
                     columns=columns,
-                    rows=row_list,
-                    row_count=len(row_list),
+                    rows=rows,
+                    row_count=len(rows),
                     truncated=truncated,
                 )
             else:
                 # Non-SELECT query
-                rows_affected = cursor.rowcount if cursor.rowcount >= 0 else 0
-                try:
-                    self._connection.commit()
-                except Exception:
-                    pass
+                rows_affected = self.adapter.execute_non_query(
+                    self._connection, self.sql
+                )
                 return NonQueryResult(rows_affected=rows_affected)
 
         finally:

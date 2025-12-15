@@ -159,36 +159,23 @@ class AutocompleteMixin:
             self._hide_autocomplete()
             return
 
-        dropdown = self.query_one("#autocomplete-dropdown", AutocompleteDropdown)
+        dropdown = self.autocomplete_dropdown
         dropdown.set_items(suggestions, filter_text)
 
-        try:
-            query_input = self.query_one("#query-input", TextArea)
-            cursor_loc = query_input.cursor_location
-            dropdown.styles.offset = (cursor_loc[1] + 2, cursor_loc[0] + 1)
-        except Exception:
-            pass
+        cursor_loc = self.query_input.cursor_location
+        dropdown.styles.offset = (cursor_loc[1] + 2, cursor_loc[0] + 1)
 
         dropdown.show()
         self._autocomplete_visible = True
 
     def _hide_autocomplete(self) -> None:
         """Hide the autocomplete dropdown."""
-        from ...widgets import AutocompleteDropdown
-
-        try:
-            dropdown = self.query_one("#autocomplete-dropdown", AutocompleteDropdown)
-            dropdown.hide()
-            self._autocomplete_visible = False
-        except Exception:
-            pass
+        self.autocomplete_dropdown.hide()
+        self._autocomplete_visible = False
 
     def _apply_autocomplete(self) -> None:
         """Apply the selected autocomplete suggestion."""
-        from ...widgets import AutocompleteDropdown
-
-        dropdown = self.query_one("#autocomplete-dropdown", AutocompleteDropdown)
-        selected = dropdown.get_selected()
+        selected = self.autocomplete_dropdown.get_selected()
 
         if not selected:
             self._hide_autocomplete()
@@ -196,9 +183,8 @@ class AutocompleteMixin:
 
         self._autocomplete_just_applied = True
 
-        query_input = self.query_one("#query-input", TextArea)
-        text = query_input.text
-        cursor_loc = query_input.cursor_location
+        text = self.query_input.text
+        cursor_loc = self.query_input.cursor_location
         cursor_pos = self._location_to_offset(text, cursor_loc)
 
         word_start = cursor_pos
@@ -214,11 +200,11 @@ class AutocompleteMixin:
         else:
             new_text = text[:word_start] + selected + text[cursor_pos:]
 
-        query_input.text = new_text
+        self.query_input.text = new_text
 
         new_cursor_pos = word_start + len(selected)
         new_loc = self._offset_to_location(new_text, new_cursor_pos)
-        query_input.cursor_location = new_loc
+        self.query_input.cursor_location = new_loc
 
         self._hide_autocomplete()
 
@@ -280,13 +266,13 @@ class AutocompleteMixin:
 
     def on_key(self, event) -> None:
         """Handle key events for autocomplete navigation."""
-        from ...widgets import AutocompleteDropdown, VimMode
+        from ...widgets import VimMode
 
         # Handle autocomplete navigation
         if not self._autocomplete_visible:
             return
 
-        dropdown = self.query_one("#autocomplete-dropdown", AutocompleteDropdown)
+        dropdown = self.autocomplete_dropdown
 
         if event.key == "down":
             dropdown.move_selection(1)

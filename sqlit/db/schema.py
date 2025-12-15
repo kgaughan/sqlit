@@ -284,6 +284,28 @@ DUCKDB_SCHEMA = ConnectionSchema(
     supports_ssh=False,
 )
 
+TURSO_SCHEMA = ConnectionSchema(
+    db_type="turso",
+    display_name="Turso",
+    fields=(
+        SchemaField(
+            name="server",
+            label="Database URL",
+            placeholder="your-db-name.turso.io",
+            required=True,
+            description="Turso database URL (without libsql:// prefix)",
+        ),
+        SchemaField(
+            name="password",
+            label="Auth Token",
+            field_type=FieldType.PASSWORD,
+            required=False,
+            description="Database authentication token, optional for local servers",
+        ),
+    ),
+    supports_ssh=False,  # Turso uses HTTPS, SSH tunneling not applicable
+)
+
 
 # Schema registry
 _SCHEMAS: dict[str, ConnectionSchema] = {
@@ -295,6 +317,7 @@ _SCHEMAS: dict[str, ConnectionSchema] = {
     "cockroachdb": COCKROACHDB_SCHEMA,
     "sqlite": SQLITE_SCHEMA,
     "duckdb": DUCKDB_SCHEMA,
+    "turso": TURSO_SCHEMA,
 }
 
 

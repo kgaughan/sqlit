@@ -5,6 +5,10 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from textual.app import App
+
+from sqlit.config import ConnectionConfig
+from sqlit.ui.screens import ConnectionScreen
 
 from .mocks import (
     MockAdapterRegistry,
@@ -14,6 +18,21 @@ from .mocks import (
     MockSettingsStore,
     create_test_connection,
 )
+
+
+class ConnectionScreenTestApp(App):
+    def __init__(self, config: ConnectionConfig | None = None, editing: bool = False):
+        super().__init__()
+        self._config = config
+        self._editing = editing
+        self.screen_result = None
+
+    async def on_mount(self) -> None:
+        screen = ConnectionScreen(self._config, editing=self._editing)
+        await self.push_screen(screen, self._capture_result)
+
+    def _capture_result(self, result) -> None:
+        self.screen_result = result
 
 
 @pytest.fixture
