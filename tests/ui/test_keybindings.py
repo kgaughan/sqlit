@@ -14,7 +14,9 @@ class TestLeaderKeybindings:
         app = SSMSTUI()
 
         async with app.run_test(size=(100, 35)) as pilot:
-            await pilot.press("space", "c")
+            await pilot.press("space")
+            await pilot.pause()
+            await pilot.press("c")
             await pilot.pause()
 
             has_picker = any(

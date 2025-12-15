@@ -230,10 +230,6 @@ class ConnectionMixin:
         """Show connection picker dialog."""
         from ..screens import ConnectionPickerScreen
 
-        if not self.connections:
-            self.notify("No connections configured", severity="warning")
-            return
-
         self.push_screen(
             ConnectionPickerScreen(self.connections),
             self._handle_connection_picker_result,
