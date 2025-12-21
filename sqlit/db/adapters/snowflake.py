@@ -62,40 +62,15 @@ class SnowflakeAdapter(CursorBasedAdapter):
             "database": config.database,
         }
 
-        # Handle optional fields if they exist in config.extra or explicitly defined
-        # Since we added them to schema, they should be in config dictionary if accessed correctly,
-        # but ConnectionConfig usually stores extra fields in a flexible way or we need to access them specifically.
-        # ConnectionConfig is a Pydantic model or dataclass. Let's assume standard fields.
-        # For extra fields defined in schema but not in ConnectionConfig core fields, they might be in `config` if it's a dict,
-        # but here `config` is an object.
-        # Looking at `sqlit/config.py` would confirm, but usually extra fields are passed differently or
-        # we might need to check how `sqlit` handles schema-specific fields.
-        # For now, I'll access standard fields. If `warehouse` is stored in `extra`, I need to know how to access it.
-        # Let's assume for now they might be passed via some mechanism or we stick to standard args.
-        # However, `ConnectionConfig` likely has an `extras` dict or similar?
-
-        # Let's check `config` object structure in `sqlit/config.py`.
-        # I'll rely on the user providing them in the specific fields if I can access them.
-
-        # NOTE: Without checking `ConnectionConfig` definition, I'll assume I can access extras.
-        # But wait, `ConnectionConfig` is imported in `base.py`. Let's check it in a separate turn if needed.
-        # For now, I'll assume standard connection.
-
         # Additional args from our schema:
         # warehouse, schema, role.
-        # If the config object allows dynamic attribute access or has a dict method, we can use that.
-        # I'll try to pull them from `config` assuming it might have them or `extra` dict.
-
-        extras = getattr(config, "extras", {}) or {}
+        extras = config.options
         if "warehouse" in extras:
             connect_args["warehouse"] = extras["warehouse"]
         if "schema" in extras:
             connect_args["schema"] = extras["schema"]
         if "role" in extras:
             connect_args["role"] = extras["role"]
-
-        # Also check if they are top-level attributes if `ConnectionConfig` is dynamic (unlikely).
-        # But let's look at `sqlit/config.py` later.
 
         return sf.connect(**connect_args)
 
@@ -107,43 +82,8 @@ class SnowflakeAdapter(CursorBasedAdapter):
 
     def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
         """Get list of tables."""
-        cursor = conn.cursor()
-        # Snowflake doesn't support changing database in connection easily for query context without USE.
-        # But we can query information_schema or SHOW TABLES.
-        # SHOW TABLES IN DATABASE ...
-
-        query = "SHOW TABLES"
-        if database:
-            query += f" IN DATABASE {self.quote_identifier(database)}"
-
-        cursor.execute(query)
-        # SHOW TABLES returns: created_on, name, database_name, schema_name, ...
-        # We need (schema, name)
-        return [(row[3], row[1]) for row in cursor.fetchall()]
-
-    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
-        """Get list of views."""
-        cursor = conn.cursor()
-        query = "SHOW VIEWS"
-        if database:
-            query += f" IN DATABASE {self.quote_identifier(database)}"
-        cursor.execute(query)
-        # SHOW VIEWS returns similar structure: ..., name, ..., schema_name, ...
-        # Check column index for SHOW VIEWS. Usually: created_on, name, kind, database_name, schema_name
-        # Actually it's best to use INFORMATION_SCHEMA for consistency if possible, but SHOW commands are faster in Snowflake sometimes.
-        # Let's check column indices or use dict cursor if available? No, usually list.
-        # SHOW TABLES: 1=name, 3=schema_name
-        # SHOW VIEWS: 1=name, 4=schema_name (need verification, varies by version)
-
-        # Alternative: INFORMATION_SCHEMA
-        sql = "SELECT table_schema, table_name FROM information_schema.views"
-        if database:
-             # If we can't cross-database query easily without full qualification
-             sql = f"SELECT table_schema, table_name FROM {self.quote_identifier(database)}.information_schema.views"
-
-        sql += " WHERE table_schema != 'INFORMATION_SCHEMA' ORDER BY table_schema, table_name"
-        cursor.execute(sql)
-        return [(row[0], row[1]) for row in cursor.fetchall()]
+        # Use information_schema for robustness across versions
+        return self.get_tables_via_info_schema(conn, database)
 
     def get_tables_via_info_schema(self, conn: Any, database: str | None = None) -> list[TableInfo]:
         """Fallback or alternative to get tables."""
@@ -153,9 +93,18 @@ class SnowflakeAdapter(CursorBasedAdapter):
         cursor.execute(sql)
         return [(row[0], row[1]) for row in cursor.fetchall()]
 
-    # I'll stick to INFORMATION_SCHEMA for robustness across versions unless slow.
-    def get_tables(self, conn: Any, database: str | None = None) -> list[TableInfo]:
-        return self.get_tables_via_info_schema(conn, database)
+    def get_views(self, conn: Any, database: str | None = None) -> list[TableInfo]:
+        """Get list of views."""
+        cursor = conn.cursor()
+        # Alternative: INFORMATION_SCHEMA
+        sql = "SELECT table_schema, table_name FROM information_schema.views"
+        if database:
+             # If we can't cross-database query easily without full qualification
+             sql = f"SELECT table_schema, table_name FROM {self.quote_identifier(database)}.information_schema.views"
+
+        sql += " WHERE table_schema != 'INFORMATION_SCHEMA' ORDER BY table_schema, table_name"
+        cursor.execute(sql)
+        return [(row[0], row[1]) for row in cursor.fetchall()]
 
     def get_columns(
         self, conn: Any, table: str, database: str | None = None, schema: str | None = None
@@ -191,8 +140,13 @@ class SnowflakeAdapter(CursorBasedAdapter):
         # Note: cursor might be consumed.
         rows = cursor.fetchall()
 
-        cursor.execute(pk_sql, (schema, table))
-        pk_columns = {row[0] for row in cursor.fetchall()}
+        pk_columns = set()
+        try:
+            cursor.execute(pk_sql, (schema, table))
+            pk_columns = {row[0] for row in cursor.fetchall()}
+        except Exception:
+            # Fallback if TABLE_CONSTRAINTS/KEY_COLUMN_USAGE is not available (e.g. insufficient privs or fakesnow)
+            pass
 
         return [
             ColumnInfo(name=row[0], data_type=row[1], is_primary_key=row[0] in pk_columns)

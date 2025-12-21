@@ -60,13 +60,12 @@ class TestSnowflakeAdapter:
                 database="TEST_DB",
                 username="testuser",
                 password="testpass",
+                options={
+                    "warehouse": "COMPUTE_WH",
+                    "schema": "ANALYTICS",
+                    "role": "DATA_ENGINEER",
+                }
             )
-            # Mock extras attribute
-            config.extras = {
-                "warehouse": "COMPUTE_WH",
-                "schema": "ANALYTICS",
-                "role": "DATA_ENGINEER",
-            }
 
             adapter.connect(config)
 
