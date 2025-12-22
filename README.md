@@ -1,20 +1,18 @@
 <p align="center">
-  <img src="assets/favorites/logo.png" alt="sqlit logo" width="200">
+  <img src="assets/favorites/logo_sqlit.png" alt="sqlit logo" width="200">
 </p>
-
-<h1 align="center">sqlit</h1>
-
 <p align="center">
   <strong>The lazygit of SQL databases.</strong><br>
   Connect and query your database from your terminal in seconds.
 </p>
-
 <p align="center">
   <a href="https://github.com/Maxteabag/sqlit/stargazers"><img src="https://img.shields.io/github/stars/Maxteabag/sqlit?style=flat&color=yellow" alt="GitHub Stars"></a>
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
-
+<p align="center">
+  <a href="https://www.buymeacoffee.com/PeterAdams"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="200"></a>
+</p>
 ---
 
 ### Connect
