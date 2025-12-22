@@ -1,35 +1,50 @@
 <p align="center">
-  <img src="assets/favorites/logo_sqlit.png" alt="sqlit logo" width="200">
+  <img src="assets/favorites/logo_sqlit.png" alt="sqlit logo" width="180">
 </p>
+
+<h3 align="center">The lazygit of SQL databases</h3>
+
 <p align="center">
-  <strong>The lazygit of SQL databases.</strong><br>
-  Connect and query your database from your terminal in seconds.
+  <em>Connect and query your database from your terminal in seconds.</em>
 </p>
+
 <p align="center">
   <a href="https://github.com/Maxteabag/sqlit/stargazers"><img src="https://img.shields.io/github/stars/Maxteabag/sqlit?style=flat&color=yellow" alt="GitHub Stars"></a>
   <img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
 </p>
+
 <p align="center">
-  <a href="https://www.buymeacoffee.com/PeterAdams"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" width="200"></a>
+  <code>pipx install sqlit-tui</code>
 </p>
 
+<p align="center">
+  <a href="https://www.buymeacoffee.com/PeterAdams"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"></a>
+</p>
+
+---
+
 ### Connect
-Sqlit supports all major DBMS's: SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Snowflake, Supabase, CloudFlare D1 and Turso.
+Supports all major databases: SQL Server, PostgreSQL, MySQL, SQLite, MariaDB, FirebirdSQL, Oracle, DuckDB, CockroachDB, ClickHouse, Snowflake, Supabase, CloudFlare D1, and Turso.
+
 ![Database Providers](demos/demo-providers.gif)
 
 ### Query
-Syntax highlighting. History. VIM-like combos.
+Syntax highlighting. History. Vim-style keybindings.
+
 ![Query History](demos/demo-history.gif)
-### **Results**
- Inspect data, filter based on content, supports fuzzy search, loads millions of rows without any problem.
+
+### Results
+Inspect data, filter by content, fuzzy search, and load millions of rows without breaking a sweat.
+
 ![Filter results](demos/demo-filter/demo-filter.gif)
 
-### **Docker discovery**
-Finds running docker sql resources. Connect to your local test servers in seconds without any configuration.
-![Filter results](demos/demo-docker-picker.gif)
+### Docker Discovery
+Automatically finds running database containers. Connect to local test servers in seconds—no configuration needed.
 
+![Docker Discovery](demos/demo-docker-picker.gif)
 
+---
 
 ## Features
 
@@ -49,6 +64,7 @@ Finds running docker sql resources. Connect to your local test servers in second
 - Themes (Rose Pine, Tokyo Night, Nord, Gruvbox)
 - **Dependency wizard** - User friendly installation for required packages and drivers
 
+---
 
 ## Motivation
 
@@ -64,30 +80,16 @@ Something wasn't right. I asked myself, why is it that running SQL queries can't
 
 `sqlit` is for the developer who just wants to query their database with a user friendly UI without their RAM being eaten alive. It is a lightweight, beautiful, and keyboard-driven TUI designed to make accessing your data enjoyable, fast and easy like it should be-- all from inside your favorite terminal.
 
+---
+
 ## Installation
 
-### Method 1: `pipx` (Recommended)
-```bash
-pipx install sqlit-tui
-```
-
-### Method 2: `uv`
-
-```bash
-uv tool install sqlit-tui
-```
-
-### Method 3: `pip`
-
-```bash
-pip install "sqlit-tui"
-```
-
-### Method 4: `aur`
-
-```bash
-yay -S python-sqlit-tui
-```
+| Method | Command |
+| :----- | :------ |
+| pipx *(recommended)* | `pipx install sqlit-tui` |
+| uv | `uv tool install sqlit-tui` |
+| pip | `pip install sqlit-tui` |
+| aur | `yay -S python-sqlit-tui` |
 
 ## Usage
 
@@ -181,7 +183,10 @@ sqlit connections delete "MyConnection"
 
 Autocomplete triggers automatically in INSERT mode. Use `Tab` to accept.
 
-You can also receive autocompletion on columns by typing the table name and hitting "."
+> [!TIP] Column autocomplete
+> Type a table name followed by `.` to get column autocompletion.
+
+---
 
 ## Configuration
 
@@ -201,6 +206,8 @@ Key differences:
 - **No need for external documentation** - Sqlit embrace the "lazy" approach in that a user should be able to jump in and use it right away intuitively. There should be no setup instructions. If python packages are required for certain adapters, sqlit will help you install them as you need them.
 - **No CLI config required** - Just run `sqlit` and pick a connection from the UI
 - **Lightweight** - While Lazysql or Harlequin offer more features, I experienced that for the vast majority of cases, all I needed was a simple and fast way to connect and run queries. Sqlit is focused on doing a limited amount of things really well.
+
+---
 
 ## Inspiration
 
@@ -246,9 +253,13 @@ SSH tunnel functionality requires additional dependencies. Install with the `ssh
 
 If you try to create an SSH connection without these dependencies, sqlit will detect this and show you the exact command to install them for your environment.
 
+---
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Maxteabag/sqlit&type=Date)](https://star-history.com/#Maxteabag/sqlit&Date)
+
+---
 
 ## License
 
