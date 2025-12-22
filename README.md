@@ -35,7 +35,7 @@ Syntax highlighting. History. Vim-style keybindings.
 ![Query History](demos/demo-history.gif)
 
 ### Results
-Load millions of rowws. Inspect data, filter by content, fuzzy search, no more squinting eyes looking for what you need!
+Load millions of rows. Inspect data, filter by content, fuzzy search, no more squinting eyes looking for what you need!
 
 ![Filter results](demos/demo-filter/demo-filter.gif)
 
