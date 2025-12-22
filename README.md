@@ -183,8 +183,8 @@ sqlit connections delete "MyConnection"
 
 Autocomplete triggers automatically in INSERT mode. Use `Tab` to accept.
 
-> [!TIP] Column autocomplete
-> Type a table name followed by `.` to get column autocompletion.
+> [!TIP]
+> **Column autocomplete:** Type a table name followed by `.` to get column autocompletion.
 
 ---
 
