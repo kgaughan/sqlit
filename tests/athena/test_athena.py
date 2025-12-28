@@ -70,17 +70,31 @@ def _terraform_config_valid() -> bool:
 
 @pytest.fixture(scope="module")
 def aws_session():
-    """Create a boto3 session."""
+    """Create a boto3 session and verify credentials are available."""
     if not HAS_BOTO3:
         pytest.skip("boto3 not installed")
 
     try:
-        return boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
+        session = boto3.Session(profile_name=AWS_PROFILE, region_name=AWS_REGION)
     except ProfileNotFound:
         # Fallback to default/env vars if profile doesn't exist
-        return boto3.Session(region_name=AWS_REGION)
-    except NoCredentialsError:
+        try:
+            session = boto3.Session(region_name=AWS_REGION)
+        except (ProfileNotFound, NoCredentialsError):
+            pytest.skip("AWS credentials not found. Skipping Athena integration tests.")
+
+    # Verify credentials are actually available by trying to get them
+    # boto3.Session() doesn't throw if credentials are missing - it only fails on API calls
+    try:
+        credentials = session.get_credentials()
+        if credentials is None:
+            pytest.skip("AWS credentials not found. Skipping Athena integration tests.")
+        # Force credential resolution to catch NoCredentialsError early
+        credentials.get_frozen_credentials()
+    except (NoCredentialsError, ProfileNotFound):
         pytest.skip("AWS credentials not found. Skipping Athena integration tests.")
+
+    return session
 
 
 @pytest.fixture(scope="module")
