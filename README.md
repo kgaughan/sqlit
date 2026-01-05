@@ -109,6 +109,9 @@ uv tool install sqlit-tui
 
 # pip
 pip install sqlit-tui
+
+# Arch Linux (AUR)
+yay -S python-sqlit-tui
 ```
 
 ## Usage

@@ -9,7 +9,7 @@ license=('MIT')
 depends=(
     'python'
     'python-textual'
-    'python-textual-fastdatatable'
+    'python-textual-fastdatatable-latest'
     'python-pyperclip'
     'python-keyring'
     'python-docker'
