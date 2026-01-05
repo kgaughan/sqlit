@@ -101,9 +101,14 @@ sqlit is for the developer who just wants to query their database with a user fr
 ## Installation
 
 ```text
-# pipx (recommended)  pipx install sqlit-tui
-# uv                 uv tool install sqlit-tui
-# pip                pip install sqlit-tui
+# pipx (recommended)
+pipx install sqlit-tui
+
+# uv
+uv tool install sqlit-tui
+
+# pip
+pip install sqlit-tui
 ```
 
 ## Usage
@@ -275,9 +280,14 @@ Most of the time you can just run `sqlit` and connect. If a Python driver is mis
 SSH tunnel functionality requires additional dependencies. Install with the `ssh` extra:
 
 ```text
-# pipx  pipx install 'sqlit-tui[ssh]'
-# uv    uv tool install 'sqlit-tui[ssh]'
-# pip   pip install 'sqlit-tui[ssh]'
+# pipx
+pipx install 'sqlit-tui[ssh]'
+
+# uv
+uv tool install 'sqlit-tui[ssh]'
+
+# pip
+pip install 'sqlit-tui[ssh]'
 ```
 
 If you try to create an SSH connection without these dependencies, sqlit will detect this and show you the exact command to install them for your environment.
