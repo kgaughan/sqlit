@@ -45,6 +45,7 @@ class ContextFooter(Horizontal):
         super().__init__()
         self._left_bindings: list[KeyBinding] = []
         self._right_bindings: list[KeyBinding] = []
+        self._key_color: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("", id="footer-left")
@@ -56,12 +57,21 @@ class ContextFooter(Horizontal):
         self._right_bindings = right
         self._rebuild()
 
+    def set_key_color(self, color: str | None) -> None:
+        """Set the color used for key hints (None for default)."""
+        if color == self._key_color:
+            return
+        self._key_color = color
+        self._rebuild()
+
     def _rebuild(self) -> None:
         """Rebuild the footer content with left and right sections."""
 
         def format_binding(binding: KeyBinding) -> str:
             if binding.disabled:
                 return f"[$text-muted strike]{binding.label}: {binding.key}[/]"
+            if self._key_color:
+                return f"{binding.label}: [bold {self._key_color}]{binding.key}[/]"
             return f"{binding.label}: [bold]{binding.key}[/]"
 
         left = "  ".join(format_binding(b) for b in self._left_bindings)

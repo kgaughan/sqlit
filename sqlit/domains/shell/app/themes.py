@@ -6,6 +6,20 @@ from rich.style import Style
 from textual.theme import Theme
 from textual.widgets.text_area import TextAreaTheme
 
+MODE_NORMAL_COLOR_VAR = "mode-normal-color"
+MODE_INSERT_COLOR_VAR = "mode-insert-color"
+
+DEFAULT_MODE_COLORS = {
+    "dark": {
+        MODE_NORMAL_COLOR_VAR: "#D8C499",
+        MODE_INSERT_COLOR_VAR: "#91C58D",
+    },
+    "light": {
+        MODE_NORMAL_COLOR_VAR: "#A7B5C3",
+        MODE_INSERT_COLOR_VAR: "#86C59B",
+    },
+}
+
 LIGHT_THEME_NAMES = {
     "sqlit-light",
     "textual-light",
@@ -34,6 +48,7 @@ SQLIT_THEMES = [
             "footer-key-foreground": "#7FA1DE",
             "button-color-foreground": "#1A1B26",
             "input-selection-background": "#2a3144 40%",
+            MODE_INSERT_COLOR_VAR: "#97CB93",
         },
     ),
     Theme(
@@ -76,6 +91,7 @@ SQLIT_THEMES = [
             "footer-key-foreground": "#00FF21",
             "button-color-foreground": "#0D0D0D",
             "input-selection-background": "#149414 40%",
+            MODE_INSERT_COLOR_VAR: "#00FF21",
         },
     ),
     Theme(
@@ -234,27 +250,6 @@ SQLIT_THEMES = [
         },
     ),
     Theme(
-        name="flexoki",
-        primary="#205EA6",
-        secondary="#DA702C",
-        accent="#205EA6",
-        warning="#D0A215",
-        error="#D14D41",
-        success="#879A39",
-        foreground="#CECDC3",
-        background="#100F0F",
-        surface="#1C1B1A",
-        panel="#282726",
-        dark=True,
-        variables={
-            "border": "#282726",
-            "input-cursor-foreground": "#5E409D",
-            "input-cursor-background": "#FFFCF0",
-            "input-selection-background": "#6F6E69 35%",
-            "button-color-foreground": "#FFFCF0",
-        },
-    ),
-    Theme(
         name="monokai",
         primary="#AE81FF",
         secondary="#66D9EF",
@@ -291,7 +286,7 @@ SQLIT_THEMES = [
             "border": "#586e75",
             "border-blurred": "#2f4a52",
             "button-color-foreground": "#fdf6e3",
-            "footer-background": "#268bd2",
+            "footer-background": "#073642",
             "footer-key-foreground": "#fdf6e3",
             "footer-description-foreground": "#fdf6e3",
             "input-selection-background": "#073642",
@@ -377,6 +372,17 @@ SQLIT_THEMES = [
         },
     ),
 ]
+
+def _apply_mode_color_defaults(themes: list[Theme]) -> None:
+    for theme in themes:
+        variables = theme.variables or {}
+        defaults = DEFAULT_MODE_COLORS["dark" if theme.dark else "light"]
+        variables.setdefault(MODE_NORMAL_COLOR_VAR, defaults[MODE_NORMAL_COLOR_VAR])
+        variables.setdefault(MODE_INSERT_COLOR_VAR, defaults[MODE_INSERT_COLOR_VAR])
+        theme.variables = variables
+
+
+_apply_mode_color_defaults(SQLIT_THEMES)
 
 SQLIT_TEXTAREA_THEMES: dict[str, TextAreaTheme] = {
     "sqlit-light": TextAreaTheme(

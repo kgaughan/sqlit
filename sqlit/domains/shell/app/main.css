@@ -126,13 +126,13 @@
     /* Vim mode cursor styling */
     #query-area.vim-normal TextArea > .text-area--cursor {
         /* Block cursor for NORMAL mode - warm beige */
-        background: #D8C499;
+        background: $mode-normal-color;
         color: $surface;
     }
 
     #query-area.vim-insert TextArea > .text-area--cursor {
         /* Cursor for INSERT mode - soft green (fallback when bar cursor is unavailable) */
-        background: #91C58D;
+        background: $mode-normal-color;
         color: $surface;
     }
 
@@ -235,7 +235,7 @@
     #status-bar {
         height: 1;
         background: $surface-darken-1;
-        padding: 0 0;
+        padding: 0 1;
     }
 
     #idle-scheduler-bar {

@@ -923,10 +923,22 @@ class SSMSTUI(
         app = cast(AppProtocol, self)
         app._update_status_bar()
 
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        from sqlit.domains.shell.app.themes import DEFAULT_MODE_COLORS
+
+        theme_key = "dark" if self.current_theme.dark else "light"
+        return dict(DEFAULT_MODE_COLORS[theme_key])
+
     def watch_theme(self, old_theme: str, new_theme: str) -> None:
         """Save theme whenever it changes."""
         self._apply_theme_classes()
         self._theme_manager.on_theme_changed(new_theme)
+        self._update_footer_bindings()
+        self._update_status_bar()
+        try:
+            self.query_input.sync_terminal_cursor()
+        except Exception:
+            pass
 
     def _apply_theme_classes(self) -> None:
         is_ansi = self.theme == "textual-ansi"

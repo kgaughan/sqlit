@@ -178,7 +178,8 @@ class UIStatusMixin:
             conn_info = "[#ff6b6b]Connection failed[/]"
         elif self.current_config:
             source_emoji = self.current_config.get_source_emoji()
-            conn_info = f"[#4ADE80]Connected to {source_emoji}{self.current_config.name}[/]"
+            conn_color = getattr(self.current_theme, "primary", "#4ADE80")
+            conn_info = f"[{conn_color}]Connected to {source_emoji}{self.current_config.name}[/]"
             if direct_active:
                 conn_info += " [dim](direct, not saved)[/]"
         else:
@@ -214,11 +215,13 @@ class UIStatusMixin:
             if self.query_input.has_focus:
                 if self.vim_mode == VimMode.NORMAL:
                     # Warm beige background for NORMAL mode
-                    mode_str = "[bold #1e1e1e on #D8C499] NORMAL [/]  "
+                    normal_color, insert_color = self._get_mode_colors()
+                    mode_str = f"[bold #1e1e1e on {normal_color}] NORMAL [/]  "
                     mode_plain = " NORMAL   "
                 else:
                     # Soft green background for INSERT mode
-                    mode_str = "[bold #1e1e1e on #91C58D] INSERT [/]  "
+                    normal_color, insert_color = self._get_mode_colors()
+                    mode_str = f"[bold #1e1e1e on {insert_color}] INSERT [/]  "
                     mode_plain = " INSERT   "
         except Exception:
             pass
@@ -289,8 +292,21 @@ class UIStatusMixin:
 
             if severity == "warning":
                 notif_str = f"{time_prefix}[#f0c674]{notification}[/]"
-            else:
+            elif severity == "error":
                 notif_str = f"{time_prefix}{notification}"
+            else:
+                mode_color = None
+                try:
+                    if self.query_input.has_focus:
+                        normal_color, insert_color = self._get_mode_colors()
+                        mode_color = normal_color if self.vim_mode == VimMode.NORMAL else insert_color
+                except Exception:
+                    mode_color = None
+
+                if mode_color:
+                    notif_str = f"{time_prefix}[{mode_color}]{notification}[/]"
+                else:
+                    notif_str = f"{time_prefix}{notification}"
 
             notif_plain = f"{timestamp} {notification}" if timestamp else notification
             gap = total_width - len(left_plain) - len(notif_plain)
@@ -421,6 +437,7 @@ class UIStatusMixin:
     def _update_footer_bindings(self: UINavigationMixinHost) -> None:
         """Update footer with context-appropriate bindings from the state machine."""
         from sqlit.shared.ui.widgets import ContextFooter, KeyBinding
+        from sqlit.core.vim import VimMode
 
         try:
             footer = self.query_one(ContextFooter)
@@ -438,3 +455,24 @@ class UIStatusMixin:
         right_bindings = [KeyBinding(b.key, b.label, b.action) for b in right_display]
 
         footer.set_bindings(left_bindings, right_bindings)
+
+        normal_color, insert_color = self._get_mode_colors()
+        key_color = normal_color
+        if not ctx.modal_open and ctx.focus == "query" and ctx.vim_mode == VimMode.INSERT:
+            key_color = insert_color
+        footer.set_key_color(key_color)
+
+    def _get_mode_colors(self: UINavigationMixinHost) -> tuple[str, str]:
+        from sqlit.domains.shell.app.themes import (
+            DEFAULT_MODE_COLORS,
+            MODE_INSERT_COLOR_VAR,
+            MODE_NORMAL_COLOR_VAR,
+        )
+
+        theme = self.current_theme
+        theme_key = "dark" if theme.dark else "light"
+        defaults = DEFAULT_MODE_COLORS[theme_key]
+        variables = getattr(theme, "variables", {}) or {}
+        normal_color = variables.get(MODE_NORMAL_COLOR_VAR, defaults[MODE_NORMAL_COLOR_VAR])
+        insert_color = variables.get(MODE_INSERT_COLOR_VAR, defaults[MODE_INSERT_COLOR_VAR])
+        return str(normal_color), str(insert_color)

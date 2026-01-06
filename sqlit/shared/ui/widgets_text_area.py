@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from textual.color import Color
 from textual.events import Key
 from textual.widgets import TextArea
 
@@ -14,7 +15,6 @@ if TYPE_CHECKING:
 class QueryTextArea(TextArea):
     """TextArea that intercepts clipboard keys and defers Enter to app."""
 
-    _INSERT_CURSOR_COLOR = "#91C58D"
     _last_text: str = ""
     _terminal_cursor_active: bool = False
 
@@ -60,6 +60,28 @@ class QueryTextArea(TextArea):
         """Use a terminal bar cursor only in INSERT mode with focus."""
         return self.has_focus and self._is_insert_mode()
 
+    def _get_insert_cursor_color(self) -> str:
+        from sqlit.domains.shell.app.themes import DEFAULT_MODE_COLORS, MODE_NORMAL_COLOR_VAR
+
+        theme = self.app.current_theme
+        variables = getattr(theme, "variables", {}) or {}
+        theme_key = "dark" if theme.dark else "light"
+        default = DEFAULT_MODE_COLORS[theme_key][MODE_NORMAL_COLOR_VAR]
+        return str(variables.get(MODE_NORMAL_COLOR_VAR, default))
+
+    def _format_osc_color(self, value: str) -> str | None:
+        value = value.strip()
+        if not value:
+            return None
+        try:
+            color = Color.parse(value)
+        except Exception:
+            return None
+        hex_value = color.hex
+        if hex_value.startswith("ansi_"):
+            return None
+        return hex_value
+
     def _sync_terminal_cursor(self) -> None:
         """Show/hide a terminal bar cursor based on insert mode and focus."""
         use_terminal = self._should_use_terminal_cursor()
@@ -77,7 +99,9 @@ class QueryTextArea(TextArea):
         if use_terminal:
             # Show cursor and request steady bar shape (DECSCUSR 6).
             driver.write("\x1b[?25h\x1b[6 q")
-            driver.write(f"\x1b]12;{self._INSERT_CURSOR_COLOR}\x1b\\")
+            osc_color = self._format_osc_color(self._get_insert_cursor_color())
+            if osc_color:
+                driver.write(f"\x1b]12;{osc_color}\x1b\\")
         else:
             # Hide cursor and reset to steady block (DECSCUSR 2).
             driver.write("\x1b[?25l\x1b[2 q")

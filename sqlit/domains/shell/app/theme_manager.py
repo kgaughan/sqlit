@@ -24,7 +24,14 @@ from .omarchy import (
     get_matching_textual_theme,
     is_omarchy_installed,
 )
-from .themes import LIGHT_THEME_NAMES, SQLIT_TEXTAREA_THEMES, SQLIT_THEMES
+from .themes import (
+    DEFAULT_MODE_COLORS,
+    MODE_INSERT_COLOR_VAR,
+    MODE_NORMAL_COLOR_VAR,
+    LIGHT_THEME_NAMES,
+    SQLIT_TEXTAREA_THEMES,
+    SQLIT_THEMES,
+)
 
 CUSTOM_THEME_SETTINGS_KEY = "custom_themes"
 CUSTOM_THEME_DIR = Path.home() / ".slit" / "themes"
@@ -327,6 +334,7 @@ class ThemeManager:
 
     def _write_custom_theme_template(self, path: Path, theme_name: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        mode_defaults = DEFAULT_MODE_COLORS["dark"]
         template = {
             "_note": "Customize colors in the theme object then reselect the theme.",
             "theme": {
@@ -345,6 +353,8 @@ class ThemeManager:
                 "variables": {
                     "border": "#334155",
                     "input-selection-background": "#3b82f6 25%",
+                    MODE_NORMAL_COLOR_VAR: mode_defaults[MODE_NORMAL_COLOR_VAR],
+                    MODE_INSERT_COLOR_VAR: mode_defaults[MODE_INSERT_COLOR_VAR],
                 },
             },
         }
