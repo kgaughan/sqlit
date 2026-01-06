@@ -48,6 +48,12 @@ class SnowflakeAdapter(CursorBasedAdapter):
     def supports_stored_procedures(self) -> bool:
         return True
 
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        """Apply a default database for unqualified queries."""
+        if not database:
+            return config
+        return config.with_endpoint(database=database)
+
     @property
     def default_schema(self) -> str:
         return "PUBLIC"

@@ -64,6 +64,12 @@ class ClickHouseAdapter(DatabaseAdapter):
         # ClickHouse doesn't have traditional stored procedures
         return False
 
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        """Apply a default database for unqualified queries."""
+        if not database:
+            return config
+        return config.with_endpoint(database=database)
+
     @property
     def supports_triggers(self) -> bool:
         # ClickHouse doesn't support triggers

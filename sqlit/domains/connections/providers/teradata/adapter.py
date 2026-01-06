@@ -53,6 +53,12 @@ class TeradataAdapter(CursorBasedAdapter):
     def supports_sequences(self) -> bool:
         return True
 
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        """Apply a default database for unqualified queries."""
+        if not database:
+            return config
+        return config.with_endpoint(database=database)
+
     @property
     def system_databases(self) -> frozenset[str]:
         return frozenset({"dbc", "syslib", "sysudtlib", "sysuif", "sysbar", "sysadmin"})

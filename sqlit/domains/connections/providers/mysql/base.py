@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from sqlit.domains.connections.domain.config import ConnectionConfig
 
 from sqlit.domains.connections.providers.adapters.base import (
     ColumnInfo,
@@ -33,6 +36,12 @@ class MySQLBaseAdapter(CursorBasedAdapter):
     @property
     def supports_stored_procedures(self) -> bool:
         return True
+
+    def apply_database_override(self, config: "ConnectionConfig", database: str) -> "ConnectionConfig":
+        """Apply a default database for unqualified queries."""
+        if not database:
+            return config
+        return config.with_endpoint(database=database)
 
     def get_databases(self, conn: Any) -> list[str]:
         """Get list of databases."""

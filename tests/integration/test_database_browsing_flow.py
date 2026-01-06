@@ -23,7 +23,15 @@ import os
 import pytest
 
 from tests.helpers import ConnectionConfig
-from tests.integration.browsing_base import BaseDatabaseBrowsingTest
+from tests.integration.browsing_base import (
+    BaseDatabaseBrowsingTest,
+    find_database_node,
+    find_folder_node,
+    find_table_node,
+    has_loading_children,
+    has_table_children,
+    wait_for_condition,
+)
 
 # ==============================================================================
 # Provider-Specific Tests
@@ -65,6 +73,105 @@ class TestMySQLDatabaseBrowsing(BaseDatabaseBrowsingTest):
     async def test_browse_all_databases_and_query(self, connection_config: ConnectionConfig, temp_config_dir: str):
         """Test MySQL database browsing with empty database field."""
         await super().test_browse_all_databases_and_query(connection_config, temp_config_dir)
+
+    @pytest.mark.asyncio
+    async def test_select_database_then_unqualified_query(
+        self, connection_config: ConnectionConfig, temp_config_dir: str
+    ):
+        """Select database in tree, then run unqualified query (regression for MySQL)."""
+        from sqlit.domains.explorer.domain.tree_nodes import ConnectionNode
+        from sqlit.domains.shell.app.main import SSMSTUI
+
+        app = SSMSTUI()
+
+        async with app.run_test(size=(120, 40)) as pilot:
+            await pilot.pause(0.1)
+
+            app.connections = [connection_config]
+            app.refresh_tree()
+            await pilot.pause(0.1)
+
+            await wait_for_condition(
+                pilot,
+                lambda: len(app.object_tree.root.children) > 0,
+                timeout_seconds=5.0,
+                description="tree to be populated with connections",
+            )
+
+            cursor_node = app.object_tree.root.children[0]
+            assert cursor_node is not None
+            assert isinstance(cursor_node.data, ConnectionNode)
+
+            app.connect_to_server(connection_config)
+            await pilot.pause(0.5)
+
+            await wait_for_condition(
+                pilot,
+                lambda: app.current_connection is not None,
+                timeout_seconds=15.0,
+                description="connection to be established",
+            )
+
+            connected_node = None
+            for child in app.object_tree.root.children:
+                if isinstance(child.data, ConnectionNode) and child.data.config.name == connection_config.name:
+                    connected_node = child
+                    break
+            assert connected_node is not None, "Connected node not found"
+
+            await wait_for_condition(
+                pilot,
+                lambda: len(connected_node.children) > 0,
+                timeout_seconds=10.0,
+                description="tree to be populated",
+            )
+
+            # Expand the Databases folder to load database list.
+            databases_folder = find_folder_node(connected_node, "databases")
+            assert databases_folder is not None, "Databases folder not found"
+
+            databases_folder.expand()
+            await pilot.pause(0.3)
+
+            await wait_for_condition(
+                pilot,
+                lambda: not has_loading_children(databases_folder) and len(databases_folder.children) > 0,
+                timeout_seconds=10.0,
+                description="databases to be loaded",
+            )
+
+            db_node = find_database_node(app.object_tree.root, self.TEST_DATABASE)
+            assert db_node is not None, f"Database '{self.TEST_DATABASE}' not found in tree"
+
+            # Select database via UI (adds star).
+            app.object_tree.move_cursor(db_node)
+            app.action_use_database()
+            await pilot.pause(0.2)
+
+            await wait_for_condition(
+                pilot,
+                lambda: getattr(app, "_get_effective_database", lambda: None)() == self.TEST_DATABASE,
+                timeout_seconds=5.0,
+                description="active database to be set",
+            )
+
+            # Run unqualified query - should succeed if active DB is applied.
+            app.query_input.text = "SELECT * FROM test_users LIMIT 1"
+            app.action_execute_query()
+            await pilot.pause(0.5)
+
+            await wait_for_condition(
+                pilot,
+                lambda: not getattr(app, "query_executing", False),
+                timeout_seconds=15.0,
+                description="query to complete",
+            )
+
+            assert app._last_result_row_count > 0, "Query returned no results"
+            assert app._last_result_columns, "Query returned no columns"
+            assert "name" in [col.lower() for col in app._last_result_columns], (
+                "Expected 'name' column in results (got error or unexpected result set)"
+            )
 
 
 class TestPostgreSQLDatabaseBrowsing(BaseDatabaseBrowsingTest):

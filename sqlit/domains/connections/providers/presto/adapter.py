@@ -61,6 +61,12 @@ class PrestoAdapter(CursorBasedAdapter):
     def supports_sequences(self) -> bool:
         return False
 
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        """Apply a default catalog for unqualified queries."""
+        if not database:
+            return config
+        return config.with_endpoint(database=database)
+
     @property
     def default_schema(self) -> str:
         return ""

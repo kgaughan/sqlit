@@ -74,6 +74,12 @@ class FlightSQLAdapter(DatabaseAdapter):
     def supports_sequences(self) -> bool:
         return False
 
+    def apply_database_override(self, config: ConnectionConfig, database: str) -> ConnectionConfig:
+        """Apply a default catalog/database for unqualified queries."""
+        if not database:
+            return config
+        return config.with_endpoint(database=database)
+
     def connect(self, config: ConnectionConfig) -> Any:
         """Connect to a Flight SQL server.
 
