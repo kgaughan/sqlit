@@ -224,6 +224,7 @@ class UIStateMachine:
         lines.append(binding("v", "Preview cell (inline)"))
         lines.append(binding("V", "View full cell value"))
         lines.append(binding("u", "Generate UPDATE statement"))
+        lines.append(binding("d", "Generate DELETE statement"))
         lines.append(binding("/", "Filter rows"))
         lines.append(binding("x", "Clear results"))
         lines.append(binding("<tab>", "Next result set"))

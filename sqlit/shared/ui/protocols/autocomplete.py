@@ -33,6 +33,7 @@ class AutocompleteStateProtocol(Protocol):
     _autocomplete_just_applied: bool
     _autocomplete_visible: bool
     _suppress_autocomplete_on_newline: bool
+    _suppress_autocomplete_once: bool
     _autocomplete_debounce_timer: Timer | None
     _text_just_changed: bool
 

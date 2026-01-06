@@ -117,6 +117,14 @@ class AutocompleteMixin(AutocompleteSchemaMixin, AutocompleteSuggestionsMixin):
         # Mark that text just changed so selection_changed knows to ignore cursor movement
         self._text_just_changed = True
 
+        if getattr(self, "_suppress_autocomplete_once", False):
+            self._suppress_autocomplete_once = False
+            if self._autocomplete_debounce_timer is not None:
+                self._autocomplete_debounce_timer.stop()
+                self._autocomplete_debounce_timer = None
+            self._hide_autocomplete()
+            return
+
         if self._autocomplete_just_applied:
             self._autocomplete_just_applied = False
             self._hide_autocomplete()

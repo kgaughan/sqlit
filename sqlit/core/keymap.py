@@ -351,6 +351,7 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("v", "view_cell", "results"),
             ActionKeyDef("V", "view_cell_full", "results"),
             ActionKeyDef("u", "edit_cell", "results"),
+            ActionKeyDef("d", "delete_row", "results"),
             ActionKeyDef("y", "results_yank_leader_key", "results"),
             ActionKeyDef("x", "clear_results", "results"),
             ActionKeyDef("slash", "results_filter", "results"),

@@ -486,6 +486,89 @@ class ResultsMixin:
         self._last_result_rows = []
         self._last_result_row_count = 0
 
+    def action_delete_row(self: ResultsMixinHost) -> None:
+        """Generate a DELETE query for the selected row and enter insert mode."""
+        table, columns, _rows, _stacked = self._get_active_results_context()
+        if not table or table.row_count <= 0:
+            self.notify("No results", severity="warning")
+            return
+
+        if not columns:
+            self.notify("No column info", severity="warning")
+            return
+
+        try:
+            cursor_row, _cursor_col = table.cursor_coordinate
+            row_values = table.get_row_at(cursor_row)
+        except Exception:
+            return
+
+        # Format value for SQL
+        def sql_value(v: object) -> str:
+            if v is None:
+                return "NULL"
+            if isinstance(v, bool):
+                return "TRUE" if v else "FALSE"
+            if isinstance(v, int | float):
+                return str(v)
+            # String - escape single quotes
+            return "'" + str(v).replace("'", "''") + "'"
+
+        # Get table name and primary key columns
+        table_name = "<table>"
+        pk_column_names: set[str] = set()
+
+        if hasattr(self, "_last_query_table") and self._last_query_table:
+            table_info = self._last_query_table
+            table_name = table_info["name"]
+            # Get PK columns from column info
+            for col in table_info.get("columns", []):
+                if col.is_primary_key:
+                    pk_column_names.add(col.name)
+
+        # Build WHERE clause - prefer PK columns, fall back to all columns
+        where_parts = []
+        for i, col in enumerate(columns):
+            if i < len(row_values):
+                # If we have PK info, only use PK columns; otherwise use all columns
+                if pk_column_names and col not in pk_column_names:
+                    continue
+                val = row_values[i]
+                if val is None:
+                    where_parts.append(f"{col} IS NULL")
+                else:
+                    where_parts.append(f"{col} = {sql_value(val)}")
+
+        # If no where parts (no PKs matched result columns), fall back to all columns
+        if not where_parts:
+            for i, col in enumerate(columns):
+                if i < len(row_values):
+                    val = row_values[i]
+                    if val is None:
+                        where_parts.append(f"{col} IS NULL")
+                    else:
+                        where_parts.append(f"{col} = {sql_value(val)}")
+
+        if not where_parts:
+            self.notify("No row values", severity="warning")
+            return
+
+        where_clause = " AND ".join(where_parts)
+
+        # Generate DELETE query for the row
+        query = f"DELETE FROM {table_name} WHERE {where_clause};"
+
+        # Set query and switch to insert mode
+        self._suppress_autocomplete_once = True
+        self.query_input.text = query
+        # Position cursor before the trailing semicolon
+        cursor_pos = max(len(query) - 1, 0)
+        self.query_input.cursor_location = (0, cursor_pos)
+
+        # Focus query editor but keep NORMAL mode (no INSERT for deletes)
+        self.action_focus_query()
+        self._update_footer_bindings()
+
     def action_edit_cell(self: ResultsMixinHost) -> None:
         """Generate an UPDATE query for the selected cell and enter insert mode."""
         table, columns, _rows, _stacked = self._get_active_results_context()
@@ -571,6 +654,7 @@ class ResultsMixin:
         cursor_pos = query.find(set_prefix) + len(set_prefix)
 
         # Set query and switch to insert mode
+        self._suppress_autocomplete_once = True
         self.query_input.text = query
         self.query_input.focus()
 

@@ -18,6 +18,7 @@ class ResultsFocusedState(State):
         self.allows("view_cell", has_results, key="v", label="View cell", help="Preview cell (tooltip)")
         self.allows("view_cell_full", has_results, key="V", label="View full", help="View full cell value")
         self.allows("edit_cell", has_results, key="u", label="Update cell", help="Update cell (generate UPDATE)")
+        self.allows("delete_row", has_results, key="d", label="Delete row", help="Delete row (generate DELETE)")
         self.allows("results_yank_leader_key", has_results, key="y", label="Copy", help="Copy menu (cell/row/all)")
         self.allows("clear_results", has_results, key="x", label="Clear", help="Clear results")
         self.allows("results_filter", has_results, key="slash", label="Filter", help="Filter rows")
@@ -80,6 +81,13 @@ class ResultsFocusedState(State):
             )
             left.append(
                 DisplayBinding(
+                    key=resolve_display_key("delete_row") or "d",
+                    label="Delete",
+                    action="delete_row",
+                )
+            )
+            left.append(
+                DisplayBinding(
                     key=resolve_display_key("results_yank_leader_key") or "y",
                     label="Copy",
                     action="results_yank_leader_key",
@@ -119,6 +127,7 @@ class ResultsFocusedState(State):
             [
                 "view_cell",
                 "view_cell_full",
+                "delete_row",
                 "results_yank_leader_key",
                 "clear_results",
                 "results_filter",

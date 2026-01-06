@@ -133,6 +133,7 @@ class SSMSTUI(
         self._autocomplete_index: int = 0
         self._autocomplete_filter: str = ""
         self._autocomplete_just_applied: bool = False
+        self._suppress_autocomplete_once: bool = False
         self._value_view_active: bool = False
         self._last_result_columns: list[str] = []
         self._last_result_rows: list[tuple[Any, ...]] = []
