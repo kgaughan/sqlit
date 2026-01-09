@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from sqlit.domains.connections.domain.config import ConnectionConfig
-from sqlit.domains.connections.providers.metadata import is_file_based
+from sqlit.domains.connections.providers.metadata import is_file_based, requires_auth
 
 
 def needs_db_password(config: ConnectionConfig) -> bool:
     """Return True if the database password should be prompted."""
     if is_file_based(config.db_type):
+        return False
+
+    if not requires_auth(config.db_type):
         return False
 
     auth_type = config.get_option("auth_type")

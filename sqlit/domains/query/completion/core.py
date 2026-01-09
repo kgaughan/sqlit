@@ -116,7 +116,7 @@ def get_all_functions() -> list[str]:
     functions = []
     for category in SQL_FUNCTIONS.values():
         functions.extend(category)
-    return list(set(functions))
+    return sorted(set(functions))
 
 
 def fuzzy_match(text: str, candidates: list[str], max_results: int = 50) -> list[str]:

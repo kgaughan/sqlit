@@ -198,6 +198,16 @@ services:
     tmpfs:
       - /var/lib/firebird/data
 
+  bigquery:
+    image: ghcr.io/goccy/bigquery-emulator:latest
+    container_name: sqlit-test-bigquery
+    command:
+      - "--project=${BIGQUERY_PROJECT:-test-project}"
+      - "--dataset=${BIGQUERY_DATASET:-test_sqlit}"
+    ports:
+      - "9050:9050"
+      - "9060:9060"
+
   # SSH server for testing SSH tunnel connections
   # Connects to postgres container on docker network
   ssh:

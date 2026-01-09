@@ -32,6 +32,13 @@ SCHEMA = ConnectionSchema(
             description="GCP Project ID (or infer from environment)",
         ),
         SchemaField(
+            name="database",
+            label="Dataset",
+            placeholder="my_dataset",
+            required=False,
+            description="Default dataset (optional)",
+        ),
+        SchemaField(
             name="bigquery_auth_method",
             label="Authentication",
             field_type=FieldType.DROPDOWN,

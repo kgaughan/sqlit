@@ -47,7 +47,7 @@ all = [
     "teradatasql>=20.0.0",
     "trino>=0.329.0",
     "presto-python-client>=0.8.4",
-    "sqlalchemy-bigquery",
+    "google-cloud-bigquery",
     "duckdb>=1.1.0",  # min avoids known CVEs
     "clickhouse-connect>=0.7.0",
     "requests>=2.32.4",  # min avoids known CVEs
@@ -71,7 +71,7 @@ hana = ["hdbcli>=2.20.0"]
 teradata = ["teradatasql>=20.0.0"]
 trino = ["trino>=0.329.0"]
 presto = ["presto-python-client>=0.8.4"]
-bigquery = ["sqlalchemy-bigquery"]
+bigquery = ["google-cloud-bigquery"]
 redshift = ["redshift-connector"]
 duckdb = ["duckdb>=1.1.0"]  # min avoids known CVEs
 clickhouse = ["clickhouse-connect>=0.7.0"]
