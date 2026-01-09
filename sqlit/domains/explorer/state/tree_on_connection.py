@@ -37,6 +37,11 @@ class TreeOnConnectionState(State):
         self.allows("edit_connection", label="Edit", help="Edit connection")
         self.allows("delete_connection", label="Delete", help="Delete connection")
         self.allows("duplicate_connection", label="Duplicate", help="Duplicate connection")
+        self.allows(
+            "toggle_connection_favorite",
+            label="Star",
+            help="Toggle favorite connection",
+        )
 
     def get_display_bindings(self, app: InputContext) -> tuple[list[DisplayBinding], list[DisplayBinding]]:
         left: list[DisplayBinding] = []
@@ -88,6 +93,14 @@ class TreeOnConnectionState(State):
             )
         )
         seen.add("duplicate_connection")
+        left.append(
+            DisplayBinding(
+                key=resolve_display_key("toggle_connection_favorite") or "*",
+                label="Star",
+                action="toggle_connection_favorite",
+            )
+        )
+        seen.add("toggle_connection_favorite")
         left.append(
             DisplayBinding(
                 key=resolve_display_key("delete_connection") or "d",

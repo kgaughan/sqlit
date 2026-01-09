@@ -579,6 +579,46 @@ class ConnectionMixin:
         self._set_connection_screen_footer()
         self.push_screen(ConnectionScreen(duplicated, editing=False), self._wrap_connection_result)
 
+    def action_toggle_connection_favorite(self: ConnectionMixinHost) -> None:
+        from sqlit.domains.connections.app.credentials import CredentialsPersistError
+        from sqlit.shared.ui.screens.error import ErrorScreen
+
+        node = self.object_tree.cursor_node
+        if not node:
+            return
+
+        config = self._get_connection_config_from_node(node)
+        if not config:
+            return
+
+        if not any(c.name == config.name for c in self.connections):
+            self.notify("Only saved connections can be starred", severity="warning")
+            return
+
+        previous = config.favorite
+        config.favorite = not previous
+        credentials_error: CredentialsPersistError | None = None
+
+        try:
+            self.services.connection_store.save_all(self.connections)
+        except CredentialsPersistError as exc:
+            credentials_error = exc
+        except Exception as exc:
+            config.favorite = previous
+            self.notify(f"Failed to update favorite: {exc}", severity="error")
+            return
+
+        if not self.services.connection_store.is_persistent:
+            self.notify("Connections are not persisted in this session", severity="warning")
+
+        self._refresh_connection_tree()
+        if config.favorite:
+            self.notify("Connection starred")
+        else:
+            self.notify("Connection unstarred")
+        if credentials_error:
+            self.push_screen(ErrorScreen("Keyring Error", str(credentials_error)))
+
     def action_delete_connection(self: ConnectionMixinHost) -> None:
         from sqlit.shared.ui.screens.confirm import ConfirmScreen
 

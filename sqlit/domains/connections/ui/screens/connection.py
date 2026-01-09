@@ -656,6 +656,8 @@ class ConnectionScreen(ModalScreen):
 
         config_data["endpoint"] = endpoint
         config_data["tunnel"] = tunnel
+        if self.editing and self.config is not None:
+            config_data["favorite"] = getattr(self.config, "favorite", False)
 
         config = ConnectionConfig.from_dict(config_data)
         from sqlit.domains.connections.providers.config_service import normalize_connection_config

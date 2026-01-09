@@ -10,6 +10,7 @@ from sqlit.shared.core.debug_events import emit_debug_event
 KEY_DISPLAY_OVERRIDES: dict[str, str] = {
     "question_mark": "?",
     "slash": "/",
+    "asterisk": "*",
     "space": "<space>",
     "escape": "<esc>",
     "enter": "<enter>",
@@ -298,6 +299,7 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("d", "delete_connection", "tree"),
             ActionKeyDef("delete", "delete_connection", "tree", primary=False),
             ActionKeyDef("D", "duplicate_connection", "tree"),
+            ActionKeyDef("asterisk", "toggle_connection_favorite", "tree"),
             ActionKeyDef("x", "disconnect", "tree"),
             ActionKeyDef("z", "collapse_tree", "tree"),
             ActionKeyDef("j", "tree_cursor_down", "tree"),

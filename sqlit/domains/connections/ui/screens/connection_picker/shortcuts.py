@@ -22,6 +22,7 @@ from sqlit.domains.connections.ui.screens.connection_picker.tabs.docker import (
     find_container_by_id,
     is_container_saved,
 )
+from sqlit.domains.connections.ui.screens.connection_picker.tabs.connections import find_connection_by_name
 
 
 def build_picker_shortcuts(
@@ -68,6 +69,7 @@ def _build_list_shortcuts(
     show_save = False
     is_connectable = False
     provider_shortcuts: list[tuple[str, str]] = []
+    star_action: tuple[str, str] | None = None
 
     if option:
         option_id = str(option.id) if option.id else ""
@@ -95,14 +97,24 @@ def _build_list_shortcuts(
         if current_tab == TAB_CONNECTIONS and option_id:
             is_connectable = True
 
+        if option_id and not option_id.startswith(DOCKER_PREFIX):
+            conn = find_connection_by_name(connections, option_id)
+            if conn:
+                star_label = "Unstar" if conn.favorite else "Star"
+                star_action = (star_label, "*")
+
     shortcuts = provider_shortcuts
     if not shortcuts:
         action_label = "Connect" if is_connectable else "Select"
         shortcuts = [(action_label, "enter")]
         if show_save:
             shortcuts.append(("Save", "s"))
+        if star_action:
+            shortcuts.append(star_action)
         if current_tab == TAB_CONNECTIONS:
             shortcuts.append(("New", "n"))
+    elif star_action:
+        shortcuts.append(star_action)
 
     if current_tab in (TAB_DOCKER, TAB_CLOUD):
         shortcuts.append(("Refresh", "f"))

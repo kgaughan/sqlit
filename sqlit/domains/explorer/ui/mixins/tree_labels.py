@@ -23,15 +23,23 @@ class TreeLabelMixin:
         db_type_label = self._db_type_badge(conn.db_type)
         escaped_name = escape_markup(conn.name)
         source_emoji = conn.get_source_emoji()
+        favorite_prefix = "[bright_yellow]*[/] " if getattr(conn, "favorite", False) else ""
 
         if status == "connected":
-            return f"[#4ADE80]* {source_emoji}{escaped_name}[/] [{db_type_label}] ({display_info})"
+            return (
+                f"{favorite_prefix}[#4ADE80]• {source_emoji}{escaped_name}[/]"
+                f" [{db_type_label}] ({display_info})"
+            )
         if status == "connecting":
             frame = spinner or SPINNER_FRAMES[0]
             return (
-                f"[#FBBF24]{frame}[/] {source_emoji}{escaped_name} [dim italic]Connecting...[/]"
+                f"{favorite_prefix}[#FBBF24]{frame}[/] {source_emoji}{escaped_name}"
+                " [dim italic]Connecting...[/]"
             )
-        return f"{source_emoji}[dim]{escaped_name}[/dim] [{db_type_label}] ({display_info})"
+        return (
+            f"{favorite_prefix}{source_emoji}[dim]{escaped_name}[/dim]"
+            f" [{db_type_label}] ({display_info})"
+        )
 
     def _connect_spinner_frame(self: TreeMixinHost) -> str:
         spinner = getattr(self, "_connect_spinner", None)

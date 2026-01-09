@@ -15,6 +15,16 @@ POPULATE_CONNECTED_DEFER_S = 0.15
 MAX_SYNC_CONNECTIONS = 50
 
 
+def _sort_connections_for_display(connections: list[Any]) -> list[Any]:
+    return [
+        conn
+        for _, conn in sorted(
+            enumerate(connections),
+            key=lambda item: (not getattr(item[1], "favorite", False), item[0]),
+        )
+    ]
+
+
 def _find_connection_node(host: TreeMixinHost, config: Any) -> Any | None:
     for node in host.object_tree.root.children:
         if host._get_node_kind(node) != "connection":
@@ -139,6 +149,7 @@ def refresh_tree(host: TreeMixinHost) -> None:
         connections = list(host.connections)
     if connecting_config and not any(c.name == connecting_config.name for c in connections):
         connections = connections + [connecting_config]
+    connections = _sort_connections_for_display(connections)
 
     for conn in connections:
         is_connected = host.current_config is not None and conn.name == host.current_config.name
@@ -186,6 +197,7 @@ def refresh_tree_chunked(
         connections = list(host.connections)
     if connecting_config and not any(c.name == connecting_config.name for c in connections):
         connections = connections + [connecting_config]
+    connections = _sort_connections_for_display(connections)
 
     def schedule_populate() -> None:
         if getattr(host, "_tree_refresh_token", None) is not token:
@@ -302,10 +314,11 @@ def populate_connected_tree(host: TreeMixinHost) -> None:
         db_type_label = host._db_type_badge(config.db_type)
         escaped_name = escape_markup(config.name)
         source_emoji = config.get_source_emoji() if hasattr(config, "get_source_emoji") else ""
+        favorite_prefix = "[bright_yellow]*[/] " if getattr(config, "favorite", False) else ""
         if connected:
-            name = f"[#4ADE80]* {source_emoji}{escaped_name}[/]"
+            name = f"{favorite_prefix}[#4ADE80]• {source_emoji}{escaped_name}[/]"
         else:
-            name = f"{source_emoji}{escaped_name}"
+            name = f"{favorite_prefix}{source_emoji}{escaped_name}"
         return f"{name} [{db_type_label}] ({display_info})"
 
     active_node = None

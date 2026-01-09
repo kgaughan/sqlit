@@ -51,6 +51,7 @@ class ConnectionPickerScreen(ModalScreen):
     BINDINGS = [
         Binding("escape", "cancel_or_close_filter", "Cancel"),
         Binding("enter", "select", "Select"),
+        Binding("asterisk", "toggle_star", "Star", show=False),
         Binding("s", "save", "Save", show=False),
         Binding("n", "new_connection", "New", show=False),
         Binding("f", "refresh", "Refresh", show=False),
@@ -537,6 +538,45 @@ class ConnectionPickerScreen(ModalScreen):
                 config = container_to_connection_config(container)
                 self._save_connection_and_refresh(config, option_id)
             return
+
+    def action_toggle_star(self) -> None:
+        if self._current_tab == TAB_CLOUD:
+            return
+
+        option = self._get_highlighted_option()
+        if not option or option.disabled:
+            return
+
+        option_id = str(option.id) if option.id else ""
+        if not option_id or is_docker_option_id(option_id):
+            return
+
+        config = find_connection_by_name(self.connections, option_id)
+        if not config:
+            return
+
+        from sqlit.domains.connections.app.credentials import CredentialsPersistError
+
+        was_favorite = config.favorite
+        config.favorite = not was_favorite
+        try:
+            self._app().services.connection_store.save_all(self.connections)
+        except CredentialsPersistError as exc:
+            self.notify(str(exc), severity="error")
+        except Exception as exc:
+            config.favorite = was_favorite
+            self.notify(f"Failed to update favorite: {exc}", severity="error")
+            self._update_list()
+            return
+
+        if not self._app().services.connection_store.is_persistent:
+            self.notify("Connections are not persisted in this session", severity="warning")
+
+        if config.favorite:
+            self.notify("Connection starred")
+        else:
+            self.notify("Connection unstarred")
+        self._update_list()
 
     def _save_cloud_selection(self) -> None:
         tree_node = self._get_highlighted_tree_node()

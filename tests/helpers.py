@@ -15,6 +15,7 @@ class _ConnectionConfigFactory:
         db_type = str(kwargs.pop("db_type", "mssql"))
         source = kwargs.pop("source", None)
         connection_url = kwargs.pop("connection_url", None)
+        favorite = bool(kwargs.pop("favorite", False))
 
         extra_options = dict(kwargs.pop("extra_options", {}) or {})
         options = dict(kwargs.pop("options", {}) or {})
@@ -76,6 +77,7 @@ class _ConnectionConfigFactory:
             tunnel=tunnel,
             source=source,
             connection_url=connection_url,
+            favorite=favorite,
             extra_options=extra_options,
             options=options,
         )

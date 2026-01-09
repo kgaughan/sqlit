@@ -126,6 +126,7 @@ class ConnectionConfig:
     tunnel: TunnelConfig | None = None
     source: str | None = None
     connection_url: str | None = None
+    favorite: bool = False
     extra_options: dict[str, str] = field(default_factory=dict)
     options: dict[str, Any] = field(default_factory=dict)
 
@@ -216,6 +217,7 @@ class ConnectionConfig:
             "db_type",
             "source",
             "connection_url",
+            "favorite",
             "extra_options",
         }
         for key in list(payload.keys()):
@@ -226,6 +228,11 @@ class ConnectionConfig:
             else:
                 payload.pop(key)
 
+        raw_favorite = payload.get("favorite", False)
+        favorite = bool(raw_favorite)
+        if isinstance(raw_favorite, str):
+            favorite = raw_favorite.strip().lower() in {"1", "true", "yes", "y", "on"}
+
         return cls(
             name=str(payload.get("name", "")),
             db_type=str(payload.get("db_type", "mssql")),
@@ -233,6 +240,7 @@ class ConnectionConfig:
             tunnel=tunnel,
             source=payload.get("source"),
             connection_url=payload.get("connection_url"),
+            favorite=favorite,
             extra_options=dict(payload.get("extra_options") or {}),
             options=options,
         )
@@ -299,6 +307,7 @@ class ConnectionConfig:
             "db_type": self.db_type,
             "source": self.source,
             "connection_url": self.connection_url,
+            "favorite": self.favorite,
             "extra_options": dict(self.extra_options),
             "options": dict(self.options),
         }

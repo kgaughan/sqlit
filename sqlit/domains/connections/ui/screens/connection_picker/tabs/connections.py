@@ -15,6 +15,7 @@ def build_connections_options(
 ) -> list[Option]:
     options: list[Option] = []
 
+    favorite_options: list[Option] = []
     saved_options: list[Option] = []
     for conn in connections:
         matches, indices = fuzzy_match(pattern, conn.name)
@@ -25,14 +26,17 @@ def build_connections_options(
             source_prefix = ""
             if conn.source == "docker":
                 source_prefix = "docker "
-            saved_options.append(
-                Option(f"{source_prefix}{display} [{db_type}] [dim]({info})[/]", id=conn.name)
-            )
+            star = "[yellow]*[/] " if conn.favorite else "  "
+            option = Option(f"{star}{source_prefix}{display} [{db_type}] [dim]({info})[/]", id=conn.name)
+            if conn.favorite:
+                favorite_options.append(option)
+            else:
+                saved_options.append(option)
 
     options.append(Option("[bold]Saved[/]", id="_header_saved", disabled=True))
 
-    if saved_options:
-        options.extend(saved_options)
+    if favorite_options or saved_options:
+        options.extend(favorite_options + saved_options)
     else:
         options.append(Option("[dim](no saved connections)[/]", id="_empty_saved", disabled=True))
 
