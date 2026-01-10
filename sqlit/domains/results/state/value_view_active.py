@@ -41,11 +41,13 @@ class ValueViewTreeModeState(State):
 
     def _setup_actions(self) -> None:
         self.allows("collapse_all_json_nodes", key="z", label="Collapse", help="Collapse all nodes")
+        self.allows("expand_all_json_nodes", key="Z", label="Expand", help="Expand all nodes")
         self.allows("toggle_value_view_mode", key="t", label="Syntax View", help="Switch to syntax view")
 
     def get_display_bindings(self, app: InputContext) -> tuple[list[DisplayBinding], list[DisplayBinding]]:
         left: list[DisplayBinding] = [
             DisplayBinding(key="z", label="Collapse", action="collapse_all_json_nodes"),
+            DisplayBinding(key="Z", label="Expand", action="expand_all_json_nodes"),
             DisplayBinding(key="t", label="Syntax View", action="toggle_value_view_mode"),
         ]
 

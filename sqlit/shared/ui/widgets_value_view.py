@@ -86,6 +86,14 @@ class InlineValueView(Container):
             except Exception:
                 pass
 
+    def expand_all_nodes(self) -> None:
+        """Expand all tree nodes."""
+        if self._is_json and self._tree_mode:
+            try:
+                self.query_one("#json-tree", JSONTreeView).action_expand_all()
+            except Exception:
+                pass
+
     def _rebuild(self) -> None:
         """Rebuild the display based on current mode."""
         try:

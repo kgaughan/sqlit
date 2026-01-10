@@ -386,6 +386,7 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("y", "copy_value_view", "value_view"),
             ActionKeyDef("t", "toggle_value_view_mode", "value_view"),
             ActionKeyDef("z", "collapse_all_json_nodes", "value_view"),
+            ActionKeyDef("Z", "expand_all_json_nodes", "value_view"),
         ]
 
 

@@ -307,6 +307,17 @@ class ResultsMixin:
         except Exception:
             pass
 
+    def action_expand_all_json_nodes(self: ResultsMixinHost) -> None:
+        """Expand all nodes in the JSON tree view."""
+        from sqlit.shared.ui.widgets import InlineValueView
+
+        try:
+            value_view = self.query_one("#value-view", InlineValueView)
+            if value_view.is_visible:
+                value_view.expand_all_nodes()
+        except Exception:
+            pass
+
     def action_copy_cell(self: ResultsMixinHost) -> None:
         """Copy the selected cell to clipboard (or internal clipboard)."""
         table, _columns, _rows, _stacked = self._get_active_results_context()
