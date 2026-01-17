@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import platform
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -552,6 +554,10 @@ class SSMSTUI(
             self._show_command_list()
             return
 
+        if cmd in {"version", "ver"}:
+            self._show_version_info()
+            return
+
         if cmd in {"q", "quit", "exit"}:
             try:
                 handler = getattr(self, "action_quit", None)
@@ -648,6 +654,7 @@ class SSMSTUI(
         columns = ["Title", "Command", "Description", "Hint"]
         rows = [
             ("General", ":commands", "Show this command list", ""),
+            ("General", ":version, :ver", "Show version and git hash", ""),
             ("General", ":help, :h", "Show keyboard shortcuts", ""),
             ("General", ":q, :quit, :exit", "Quit sqlit", ""),
             ("Connection", ":connect, :c", "Open connection picker", ""),
@@ -696,6 +703,89 @@ class SSMSTUI(
         ]
         if hasattr(self, "_replace_results_table"):
             self._replace_results_table(columns, rows)
+
+    def _resolve_repo_root(self) -> Path | None:
+        path = Path(__file__).resolve()
+        for parent in (path, *path.parents):
+            if (parent / ".git").exists():
+                return parent
+        return None
+
+    def _parse_git_hash_from_version(self, version: str) -> str | None:
+        import re
+
+        match = re.search(r"\\+g([0-9a-fA-F]{7,})", version)
+        if not match:
+            return None
+        return match.group(1)
+
+    def _get_git_info(self) -> tuple[str | None, bool | None]:
+        repo_root = self._resolve_repo_root()
+        if repo_root is None:
+            return None, None
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=repo_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            git_hash = result.stdout.strip() or None
+        except Exception:
+            git_hash = None
+        dirty: bool | None = None
+        try:
+            status = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=repo_root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if status.stdout is not None:
+                dirty = bool(status.stdout.strip())
+        except Exception:
+            dirty = None
+        return git_hash, dirty
+
+    def _show_version_info(self) -> None:
+        try:
+            from sqlit import __version__ as pkg_version
+        except Exception:
+            pkg_version = "unknown"
+
+        git_hash = self._parse_git_hash_from_version(pkg_version)
+        dirty: bool | None = None
+        if git_hash is None:
+            git_hash, dirty = self._get_git_info()
+        else:
+            _repo_hash, dirty = self._get_git_info()
+
+        git_display = git_hash or "unknown"
+        dirty_display = "unknown"
+        if dirty is True:
+            dirty_display = "yes"
+            if git_hash:
+                git_display = f"{git_display} (dirty)"
+        elif dirty is False:
+            dirty_display = "no"
+
+        info_rows = [
+            ("version", pkg_version),
+            ("git", git_display),
+            ("dirty", dirty_display),
+            ("python", platform.python_version()),
+            ("platform", sys.platform),
+        ]
+
+        if hasattr(self, "_replace_results_table"):
+            self._replace_results_table(["Key", "Value"], info_rows)
+
+        summary = f"sqlit {pkg_version}"
+        if git_hash:
+            summary = f"{summary} ({git_hash})"
+        self.notify(summary, severity="information")
 
     def _execute_command_action(self, action: str) -> None:
         ctx = self._get_input_context()
