@@ -240,14 +240,14 @@ class HistoryStore:
         self._ensure_dir(target_dir)
 
         qhash = _query_hash(entry.query)
-        # Drop any same-hash file across all (conn, db) pairs so a query
-        # that moves between databases doesn't leave a stale duplicate.
-        for existing in self._all_files(entry.connection_name):
-            if existing.name.endswith(f"_{qhash}.sql"):
-                try:
-                    existing.unlink()
-                except OSError:
-                    pass
+        # Dedup is per (connection, database): running the same query
+        # against two different databases preserves both as separate
+        # history entries.
+        for existing in target_dir.glob(f"*_{qhash}.sql"):
+            try:
+                existing.unlink()
+            except OSError:
+                pass
 
         filename = f"{_timestamp_to_filename(entry.timestamp)}_{qhash}.sql"
         dest = target_dir / filename

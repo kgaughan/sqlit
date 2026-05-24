@@ -90,15 +90,24 @@ class TestDedup:
         store.save_query("c", "  SELECT 1  ")
         assert len(store.load_for_connection("c")) == 1
 
-    def test_dedup_across_db_subdirs(self, store: HistoryStore) -> None:
-        """Same query on different DBs of the same connection — last write wins."""
+    def test_same_query_on_different_dbs_is_preserved(self, store: HistoryStore) -> None:
+        """Same SQL against different databases on one connection is two
+        legitimately distinct events — dedup is scoped to (conn, db)."""
         store.save_query("c", "SELECT 1", database="db_a")
         store.save_query("c", "SELECT 1", database="db_b")
-        # Single file total (the second save deletes the first).
-        assert len(_all_files_for(store, "c")) == 1
+        assert len(_all_files_for(store, "c")) == 2
         entries = store.load_for_connection("c")
-        assert len(entries) == 1
-        assert entries[0].database == "db_b"
+        assert len(entries) == 2
+        assert {e.database for e in entries} == {"db_a", "db_b"}
+
+    def test_dedup_within_same_db_replaces_existing(self, store: HistoryStore) -> None:
+        """Re-running the same query against the same database still
+        collapses to one file with the newer timestamp."""
+        store.save_query("c", "SELECT 1", database="db_a")
+        import time
+        time.sleep(0.01)
+        store.save_query("c", "SELECT 1", database="db_a")
+        assert len(_all_files_for(store, "c")) == 1
 
 
 class TestPathLayout:
