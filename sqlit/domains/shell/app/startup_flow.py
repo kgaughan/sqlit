@@ -35,6 +35,14 @@ def run_on_mount(app: AppProtocol) -> None:
     settings = app._theme_manager.initialize()
     app._startup_stamp("settings_loaded")
 
+    app._keymap_manager.initialize()
+    # Feed the (possibly user-customized) keymap into Textual so that any
+    # Binding with id=<action-name> picks up the user's key.
+    from sqlit.core.keymap import build_textual_keymap, get_keymap
+
+    app.set_keymap(build_textual_keymap(get_keymap()))
+    app._startup_stamp("keymap_loaded")
+
     app._expanded_paths = set(settings.get("expanded_nodes", []))
     if settings.get("debug_events_enabled"):
         setter = getattr(app, "_set_debug_events_enabled", None)
@@ -98,6 +106,7 @@ def run_on_mount(app: AppProtocol) -> None:
     app._startup_stamp("footer_updated")
     _warn_on_missing_actions(app, is_headless)
     _warn_on_keyring_error(app, is_headless)
+    _warn_on_keymap_error(app, is_headless)
     if (
         app.services.runtime.process_worker
         and app.services.runtime.process_worker_warm_on_idle
@@ -154,6 +163,28 @@ def _warn_on_keyring_error(app: AppProtocol, is_headless: bool) -> None:
         app.notify(message, severity="warning", timeout=15)
     except Exception:
         print(f"[sqlit] {message}", file=sys.stderr)
+
+
+def _warn_on_keymap_error(app: AppProtocol, is_headless: bool) -> None:
+    manager = getattr(app, "_keymap_manager", None)
+    error = getattr(manager, "load_error", None) if manager else None
+    if not error:
+        return
+    from sqlit.domains.shell.app.keymap_manager import CUSTOM_KEYMAP_DIR
+    message = f"{error}\nDefaults are in effect — fix {CUSTOM_KEYMAP_DIR} and restart."
+    if is_headless:
+        print(f"[sqlit] {message}", file=sys.stderr)
+        return
+    # Defer until the screen is composed — calling notify() during
+    # run_on_mount refreshes the notification rack, which touches widgets
+    # (`#results-area DataTable`) that aren't mounted yet.
+    def _show() -> None:
+        try:
+            app.notify(message, severity="error", timeout=15)
+        except Exception:
+            print(f"[sqlit] {message}", file=sys.stderr)
+
+    app.call_after_refresh(_show)
 
 
 def apply_mock_settings(app: AppProtocol, settings: dict) -> None:

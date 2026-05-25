@@ -15,9 +15,7 @@ class HelpScreen(ModalScreen):
     """Modal screen showing keyboard shortcuts and navigation tips."""
 
     BINDINGS = [
-        Binding("escape", "dismiss", "Close"),
-        Binding("enter", "dismiss", "Close"),
-        Binding("q", "dismiss", "Close"),
+        Binding("escape,enter,q", "dismiss", "Close"),
         Binding("j", "scroll_down", "Scroll down", show=False),
         Binding("k", "scroll_up", "Scroll up", show=False),
         Binding("g", "scroll_home", "Scroll to top", show=False),

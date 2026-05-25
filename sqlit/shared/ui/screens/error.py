@@ -14,8 +14,7 @@ class ErrorScreen(ModalScreen):
     """Modal screen for displaying error messages."""
 
     BINDINGS = [
-        Binding("enter", "close", "Close"),
-        Binding("escape", "close", "Close"),
+        Binding("enter,escape", "close", "Close"),
         Binding("y", "copy_message", "Copy"),
     ]
 

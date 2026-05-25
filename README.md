@@ -241,6 +241,10 @@ Connections and settings are stored in `$XDG_CONFIG_HOME/sqlit/` (default: `~/.c
 
 If an older install left files in `~/.sqlit/`, they are moved to the new location automatically on first run.
 
+### Custom keybindings
+
+Edit the `keymap.json` file in your sqlit config dir. See [`config/keymap.template.json`](config/keymap.template.json) for the full default keymap. Keymap.json need to only contain the overriding keymaps.
+
 ## FAQ
 
 ### How are sensitive credentials stored?

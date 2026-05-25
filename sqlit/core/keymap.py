@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 
 from sqlit.shared.core.debug_events import emit_debug_event
@@ -339,6 +340,9 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("ctrl+q", "quit", "global"),
             ActionKeyDef("escape", "cancel_operation", "global"),
             ActionKeyDef("question_mark", "show_help", "global"),
+            ActionKeyDef("colon", "enter_command_mode", "global"),
+            ActionKeyDef("shift+semicolon", "enter_command_mode", "global", primary=False),
+            ActionKeyDef(":", "enter_command_mode", "global", primary=False),
             # Query (normal mode)
             ActionKeyDef("i", "enter_insert_mode", "query_normal"),
             ActionKeyDef("I", "prepend_insert_mode", "query_normal"),
@@ -428,14 +432,19 @@ class DefaultKeymapProvider(KeymapProvider):
             # Query (insert mode)
             ActionKeyDef("escape", "exit_insert_mode", "query_insert"),
             ActionKeyDef("ctrl+enter", "execute_query_insert", "query_insert"),
-            ActionKeyDef("tab", "autocomplete_accept", "query_insert"),
+            # autocomplete_accept lives in the 'autocomplete' context below;
+            # the query_insert context still acquires it implicitly when the
+            # dropdown is visible.
             # Navigation
             ActionKeyDef("e", "focus_explorer", "navigation"),
             ActionKeyDef("q", "focus_query", "navigation"),
             ActionKeyDef("r", "focus_results", "navigation"),
             # Query (autocomplete)
             ActionKeyDef("ctrl+j", "autocomplete_next", "autocomplete"),
+            ActionKeyDef("down", "autocomplete_next", "autocomplete", primary=False),
             ActionKeyDef("ctrl+k", "autocomplete_prev", "autocomplete"),
+            ActionKeyDef("up", "autocomplete_prev", "autocomplete", primary=False),
+            ActionKeyDef("tab", "autocomplete_accept", "autocomplete"),
             ActionKeyDef("escape", "autocomplete_close", "autocomplete"),
             # Clipboard (only in insert mode for vim consistency)
             ActionKeyDef("ctrl+a", "select_all", "query_insert"),
@@ -553,3 +562,18 @@ def emit_keybinding_snapshot(provider: KeymapProvider | None = None) -> None:
             keymap._action_emitted = True  # type: ignore[attr-defined]
         except Exception:
             pass
+
+
+def build_textual_keymap(provider: KeymapProvider) -> dict[str, str]:
+    """Build a Textual-compatible keymap dict from a KeymapProvider.
+
+    Groups action keys by action name (across contexts) and joins the keys
+    with commas — Textual's set_keymap accepts comma-separated key lists.
+    Use the result with ``App.set_keymap(...)`` so that Bindings with
+    matching ``id=`` get their keys overridden at runtime.
+    """
+    by_action: dict[str, list[str]] = defaultdict(list)
+    for ak in provider.get_action_keys():
+        if ak.key not in by_action[ak.action]:
+            by_action[ak.action].append(ak.key)
+    return {action: ",".join(keys) for action, keys in by_action.items()}
