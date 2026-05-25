@@ -206,7 +206,6 @@ class DefaultKeymapProvider(KeymapProvider):
             LeaderCommandDef("h", "show_help", "Help", "Actions"),
             LeaderCommandDef("space", "telescope", "Telescope", "Actions"),
             LeaderCommandDef("slash", "telescope_filter", "Telescope Search", "Actions"),
-            LeaderCommandDef("q", "quit", "Quit", "Actions"),
             # Delete menu (vim-style)
             LeaderCommandDef("d", "line", "Delete line", "Delete", menu="delete"),
             LeaderCommandDef("w", "word", "Delete word", "Delete", menu="delete"),
@@ -337,7 +336,10 @@ class DefaultKeymapProvider(KeymapProvider):
             ActionKeyDef("enter", "tree_filter_accept", "tree_filter"),
             # Global
             ActionKeyDef("space", "leader_key", "global", priority=True),
-            ActionKeyDef("ctrl+q", "quit", "global"),
+            # quit is intentionally not in the user-overridable keymap;
+            # it lives only as Textual's built-in App.BINDINGS (ctrl+q) and
+            # the `:q` command. Keeping it un-rebindable avoids the footgun
+            # of a user accidentally locking themselves out of the exit key.
             ActionKeyDef("escape", "cancel_operation", "global"),
             ActionKeyDef("question_mark", "show_help", "global"),
             ActionKeyDef("colon", "enter_command_mode", "global"),
